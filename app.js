@@ -13,6 +13,8 @@
   let tick = performance.now();
   let lastSaved = tick;
   let currentModule = 'builder';
+  let recognition = null;
+  let voiceGeneration = 0;
   function notice(text) { $('storageNotice').textContent = text; $('storageNotice').hidden = !text; }
   try {
     const raw = localStorage.getItem(C.KEY);
@@ -74,6 +76,7 @@
   }
   function start(ids, mode) {
     if (!ids.length) return;
+    stopRecognition(); stopSpeech();
     state.session = C.newSession(ids, mode, Date.now(), crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random());
     tick = performance.now(); save(); renderExercise();
   }
@@ -90,6 +93,7 @@
     }
   }
   function updateChosen() {
+    stopRecognition();
     $('qbAnswer').value = selected.map(token => token.text).join(' ');
     $('chosenTokens').replaceChildren();
     selected.forEach((token, index) => $('chosenTokens').append(button(token.text + ' ×', () => {
@@ -101,6 +105,7 @@
     selected = []; updateChosen(); $('qbAnswer').focus();
   }
   function renderExercise() {
+    stopRecognition(); stopSpeech();
     if (!state.session) { setView('qbHome'); return; }
     if (state.session.cursor >= state.session.ids.length) { renderSummary(); return; }
     setView('qbExercise');
@@ -112,6 +117,8 @@
     $('qbSkill').textContent = exercise.skill;
     $('qbPrompt').textContent = exercise.prompt;
     $('qbAnswer').value = '';
+    $('answerNotice').textContent = ''; $('audioNotice').textContent = '';
+    $('voiceNotice').textContent = '말하기는 선택 사항이에요. 직접 입력이나 단어 선택으로도 수업을 마칠 수 있어요.';
     renderTokens(exercise);
     feedback = false;
     $('qbFeedback').hidden = true; $('nextQuestion').hidden = true; $('retryQuestion').hidden = true;
@@ -133,6 +140,7 @@
     $('retryQuestion').disabled = paused;
     for (const node of $('tokenBank').children) node.disabled = paused || feedback || selected.some(token => token.id === Number(node.dataset.tokenId));
     for (const node of $('chosenTokens').children) node.disabled = paused || feedback;
+    renderVoiceControls();
   }
   function showFeedback(exercise, result) {
     feedback = true;
@@ -150,6 +158,7 @@
   $('qbForm').addEventListener('submit', event => {
     event.preventDefault();
     if (feedback || !state.session || state.session.paused) return;
+    stopRecognition();
     const exercise = bank[state.session.ids[state.session.cursor]];
     const result = C.evaluate(exercise, $('qbAnswer').value);
     if (result.empty) { $('answerNotice').textContent = result.message; $('qbAnswer').focus(); return; }
@@ -157,10 +166,14 @@
     C.record(state, exercise, result, Date.now()); save(); showFeedback(exercise, result);
   });
   $('qbAnswer').addEventListener('input', () => {
+    stopRecognition('직접 입력으로 전환했어요. 문장을 확인한 뒤 답안 확인을 눌러 주세요.');
+    answerChanged();
+  });
+  function answerChanged() {
     selected = []; $('chosenTokens').replaceChildren();
     for (const node of $('tokenBank').children) node.disabled = false;
     $('answerNotice').textContent = '';
-  });
+  }
   $('nextQuestion').onclick = () => {
     if (!feedback || state.session.paused) return;
     accountTime(); state.session.cursor++; save(); renderExercise();
@@ -173,12 +186,13 @@
   };
   $('clearQuestion').onclick = clearAnswer;
   $('pauseQuestion').onclick = () => {
+    stopRecognition(); stopSpeech();
     accountTime(); state.session.paused = !state.session.paused; save(); renderPause();
   };
   function home() {
     accountTime();
     if (state.session) state.session.paused = true;
-    save(); stopSpeech(); setView('qbHome'); refreshHome(); $('builderTitle').focus();
+    save(); stopRecognition(); stopSpeech(); setView('qbHome'); refreshHome(); $('builderTitle').focus();
   }
   $('backToLessons').onclick = home;
   $('summaryHome').onclick = home;
@@ -235,6 +249,7 @@
       if (parsed.version !== 1 || !parsed.review || !Array.isArray(parsed.completions)) throw new Error('SpeakForward 기록 파일인지 확인해 주세요.');
       const restored = C.restore(text, bank, Date.now());
       if (!window.confirm('선택한 기록으로 Question Builder 기록을 교체할까요? 먼저 내보내기로 현재 기록을 보관할 수 있습니다.')) return;
+      stopRecognition(); stopSpeech();
       state = restored.state; save(); setView('qbHome'); refreshHome();
       notice(restored.repaired ? '기록을 가져왔고 일부 유효하지 않은 항목을 복구했습니다.' : 'Question Builder 기록을 가져왔습니다.');
     } catch (error) { notice('가져오기 실패: ' + error.message); }
@@ -242,7 +257,89 @@
   };
   let utterance = null;
   function stopSpeech() { if ('speechSynthesis' in window) speechSynthesis.cancel(); utterance = null; }
+  function renderVoiceControls() {
+    const blocked = !state.session || state.session.paused || feedback;
+    $('qbSpeak').disabled = blocked || Boolean(recognition);
+    $('qbSpeak').setAttribute('aria-pressed', String(Boolean(recognition)));
+    $('qbStopMic').disabled = !recognition;
+    $('qbTypeAnswer').disabled = blocked;
+  }
+  function stopRecognition(message) {
+    const active = recognition;
+    recognition = null; voiceGeneration++;
+    if (active) {
+      active.onstart = active.onresult = active.onerror = active.onend = null;
+      try { if (active.abort) active.abort(); else active.stop(); } catch { /* Already ended. */ }
+      $('voiceNotice').textContent = message || '마이크를 멈췄어요. 인식된 문장을 확인하거나 직접 입력하세요.';
+    }
+    renderVoiceControls();
+  }
+  $('qbSpeak').onclick = () => {
+    if (!state.session || state.session.paused || feedback || currentModule !== 'builder') return;
+    stopSpeech(); stopRecognition();
+    const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!R) {
+      $('voiceNotice').textContent = '이 브라우저는 음성 인식을 지원하지 않습니다. 직접 입력이나 단어 선택으로 계속하세요.';
+      $('qbAnswer').focus(); return;
+    }
+    const generation = voiceGeneration;
+    const sessionId = state.session.id;
+    const cursor = state.session.cursor;
+    let heard = false;
+    let finalText = '';
+    const prefix = $('qbAnswer').value.trim();
+    const current = () => generation === voiceGeneration && recognition && state.session?.id === sessionId &&
+      state.session.cursor === cursor && !state.session.paused && !feedback && currentModule === 'builder' && !document.hidden;
+    try {
+      recognition = new R();
+      recognition.lang = 'en-US'; recognition.continuous = false; recognition.interimResults = true;
+      recognition.onstart = () => {
+        if (current()) $('voiceNotice').textContent = '듣고 있어요… 영어로 질문을 말해 주세요. 마이크 멈춤으로 언제든 끝낼 수 있어요.';
+      };
+      recognition.onresult = event => {
+        if (!current()) return;
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) finalText += result[0].transcript + ' ';
+          else interim += result[0].transcript;
+        }
+        heard = Boolean((finalText + interim).trim());
+        $('qbAnswer').value = [prefix, (finalText + interim).trim()].filter(Boolean).join(' ');
+        answerChanged();
+        $('voiceNotice').textContent = '듣고 있어요… 인식된 문장은 아래에 표시됩니다. 자동으로 제출하지 않아요.';
+      };
+      recognition.onerror = event => {
+        if (!current()) return;
+        const messages = {
+          'not-allowed': '마이크 권한이 허용되지 않았어요. Chrome의 사이트 설정에서 허용하거나 직접 입력하세요.',
+          'service-not-allowed': '브라우저에서 음성 인식 서비스를 사용할 수 없어요. 직접 입력으로 계속하세요.',
+          'audio-capture': '사용할 수 있는 마이크가 없어요. 마이크 연결을 확인하거나 직접 입력하세요.',
+          'no-speech': '음성이 들리지 않았어요. 다시 말하거나 직접 입력하세요.',
+          network: '음성 인식에 연결하지 못했어요. 인터넷 연결을 확인하거나 직접 입력하세요.'
+        };
+        stopRecognition(messages[event.error] || '음성 인식을 마쳤어요. 인식된 문장을 확인하거나 직접 입력하세요.');
+      };
+      recognition.onend = () => {
+        if (!current()) return;
+        stopRecognition(heard ? '인식된 문장을 확인·수정한 뒤 답안 확인을 눌러 주세요.' : '인식된 말이 없어요. 다시 말하거나 직접 입력하세요.');
+      };
+      renderVoiceControls();
+      $('voiceNotice').textContent = '마이크 연결 중… 권한 요청이 나타나면 선택해 주세요. 영어로 질문을 말해 보세요.';
+      recognition.start();
+    } catch {
+      stopRecognition();
+      $('voiceNotice').textContent = '음성 인식을 시작할 수 없어요. 직접 입력으로 계속하세요.';
+    }
+  };
+  $('qbStopMic').onclick = () => stopRecognition();
+  $('qbTypeAnswer').onclick = () => {
+    stopRecognition(); stopSpeech();
+    $('voiceNotice').textContent = '조용히 직접 입력하는 중이에요. 마이크 없이 수업을 마칠 수 있어요.';
+    $('qbAnswer').focus();
+  };
   $('qbListen').onclick = () => {
+    stopRecognition();
     if (!('speechSynthesis' in window)) { $('audioNotice').textContent = '이 브라우저는 음성 재생을 지원하지 않습니다. 텍스트로 계속 학습할 수 있어요.'; return; }
     stopSpeech();
     const exercise = bank[state.session.ids[state.session.cursor]];
@@ -256,7 +353,7 @@
   };
   $('qbStopAudio').onclick = () => { stopSpeech(); $('audioNotice').textContent = '재생을 멈췄습니다.'; };
   document.querySelectorAll('.tab').forEach(node => node.addEventListener('click', () => {
-    accountTime(); currentModule = node.dataset.target; stopSpeech();
+    accountTime(); currentModule = node.dataset.target; stopRecognition(); stopSpeech();
     document.querySelectorAll('.tab').forEach(tab => {
       tab.setAttribute('aria-selected', String(tab === node)); tab.classList.toggle('active-tab', tab === node);
       tab.tabIndex = tab === node ? 0 : -1;
@@ -276,8 +373,8 @@
       if (next !== undefined) { event.preventDefault(); tabs[next].click(); tabs[next].focus(); }
     });
   });
-  document.addEventListener('visibilitychange', () => { accountTime(); if (document.hidden) { stopSpeech(); save(); } });
-  window.addEventListener('pagehide', () => { accountTime(); save(); stopSpeech(); });
+  document.addEventListener('visibilitychange', () => { accountTime(); if (document.hidden) { stopRecognition(); stopSpeech(); save(); } });
+  window.addEventListener('pagehide', () => { accountTime(); save(); stopRecognition(); stopSpeech(); });
   setInterval(() => { accountTime(); renderTime(); if (performance.now() - lastSaved >= 5000) { save(); lastSaved = performance.now(); }
     if (!$('qbHome').hidden) refreshHome(); }, 1000);
   let deferredInstall;

@@ -1,5 +1,5 @@
 'use strict';
-const CACHE = 'speakforward-shell-v1';
+const CACHE = 'speakforward-shell-v2';
 const FILES = ['./', './index.html', './styles.css', './legacy.js', './core.js', './lessons.js', './app.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', event => {

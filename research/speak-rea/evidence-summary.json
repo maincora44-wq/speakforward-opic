@@ -1,0 +1,76 @@
+{
+  "kind": "sanitized-summary-not-an-importable-rea-evidence-bundle",
+  "generated_at": "2026-10-18T23:48:25.414734+00:00",
+  "target": "Speak public web entry",
+  "entry_url": "https://app.speak.com/",
+  "acquisition": {
+    "retrieved_at": "2026-10-18T23:46:01.091563+00:00",
+    "entry_url": "https://app.speak.com/",
+    "method": "unauthenticated public GET; static files only",
+    "listed_script_count": 22,
+    "selected_scripts": [
+      {
+        "url": "https://speak-app-assets.usespeak.com/_next/static/chunks/app/(no-intl)/layout-ae56cb52f14769ab.js",
+        "local_file": "public-layout.js",
+        "bytes": 6442,
+        "sha256": "1dd9453e8d913334510abec7937fde857839f4bd8e0974ddec674cfae785c2d1",
+        "status": 200
+      },
+      {
+        "url": "https://speak-app-assets.usespeak.com/_next/static/chunks/app/(no-intl)/region/page-aeb8d4f1d2f1f855.js",
+        "local_file": "region-page.js",
+        "bytes": 14087,
+        "sha256": "590a29e8f9a17c2cd175951f866e2cecaf206f054d2e5346caa3c015c55800de",
+        "status": 200
+      }
+    ]
+  },
+  "rea_version": "6.5.0",
+  "evidence_id": "ev_2e667cda60f169861df48222c9443e2fc33880492ca44a4b01cf52841aa4c80c",
+  "evidence_file_sha256": "de3b1fa67f82b3a5e659d25f77274d7ebf23cabb6e1da0082cd6d1b9114d0d6a",
+  "subject_digest": {
+    "sha256": "fec8528da31c5165a7fb108e4c4ec834a2ae552a2298367bd354eb90f8464204"
+  },
+  "operation": "analyze_javascript_application",
+  "parameters": {
+    "format": "auto",
+    "integrity_policy": "fail",
+    "source_paths": [
+      "region-page.js",
+      "public-layout.js"
+    ],
+    "analysis_timeout_ms": 60000
+  },
+  "authority": "shipped-artifact",
+  "confidence": "derived",
+  "source_selection": {
+    "requested_paths": [
+      "region-page.js",
+      "public-layout.js"
+    ],
+    "unselected_files": 2
+  },
+  "statistics": {
+    "relevant_files": 4,
+    "nested_asar_containers": 0,
+    "text_bytes_read": 20529,
+    "invalid_utf8_files": 0,
+    "parsed_javascript_files": 2,
+    "visited_ast_nodes": 6305,
+    "findings": 108,
+    "modules": 44,
+    "parse_failures": 0
+  },
+  "limitations": [
+    "Caller-selected source analysis leaves 2 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.",
+    "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+    "Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.",
+    "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+    "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.",
+    "Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.",
+    "Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code."
+  ],
+  "runtime_browser_capture_count": 0,
+  "observed_lesson_transitions": 0,
+  "raw_retention": "Workspace only: /workspace/scratch/speak-rea-evidence.json; public repository contains this summary, not third-party code or full Evidence."
+}

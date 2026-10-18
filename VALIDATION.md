@@ -2,6 +2,18 @@
 
 Date: 2026-10-18 KST.
 
+## Speak follow-up validation — 2026-10-18 UTC / 2026-10-19 KST
+
+The user requested completing the existing site work with Speak as the REA target. REA 6.5.0 actually completed a static analysis of two publicly served Speak entry scripts. See [the execution report](research/speak-rea/REA_EXECUTED_REPORT.md) for its returned Evidence ID, acquisition hashes and explicit scope. No signed-in Speak lesson or Android app was observed.
+
+The Question Builder now accepts optional browser speech recognition, always requires explicit answer submission, and keeps manual typing/token selection available. Recognition is aborted on pause, lesson/module navigation, typing, token selection, backgrounding and page exit. Generation checks reject late callbacks. Transcript text is not added to persisted progress.
+
+Validation executed in the Linux workspace: clean `npm ci --ignore-scripts`; **29/29 tests passed**; `node --check app.js`; `node --check sw.js`; `git diff --check`. Four added DOM cases cover spoken-answer editing and explicit submission, transcript minimization, denial/network/no-speech/unsupported fallbacks, cancellation and stale callbacks, startup failure and token input. Recognition in these tests is mocked.
+
+No connected browser-control tool is available in this session. No rendered browser, live microphone, external speech service, physical Android device, installed-app lifecycle or airplane-mode reload was tested. The installed Chromium executable alone does not establish a permitted connected browser session. HTTPS delivery and GitHub Actions deployment are checked separately after publication. Service-worker cache is bumped to `speakforward-shell-v2` so existing installations can update.
+
+The sections below retain the original release's scope and verification history.
+
 ## Scope
 
 Independent SpeakForward implementation authorized by the user's follow-up request. Public PWA deployment explicitly authorized in the subsequent answer. The Duolingo REA runtime investigation remains blocked and is not treated as successful research.
