@@ -10,6 +10,7 @@ function boot(options={}) {
    url:'https://maincora44-wq.github.io/speakforward-opic/',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole
  });
  const w=dom.window;
+ if(options.recognition)w.SpeechRecognition=options.recognition;
  if(options.saved)w.localStorage.setItem('speakForward.questionBuilder.v1',options.saved);
  if(options.blockStorage)Object.defineProperty(w,'localStorage',{get(){throw new w.DOMException('Blocked','SecurityError');}});
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
@@ -82,4 +83,61 @@ test('microphone permission denial resets recording controls without blocking ty
  assert.equal(env.$('startRecord').disabled,false);assert.equal(env.$('stopRecord').disabled,true);
  assert.match(env.$('recordNotice').textContent,/permission was unavailable/);assert.deepEqual(env.errors,[]);
  }finally{env.dom.window.close();}
+});
+
+function mockRecognition() {
+ const instances=[];
+ class Recognition {
+  constructor(){this.aborted=false;instances.push(this);}
+  start(){this.started=true;}
+  abort(){this.aborted=true;}
+  emit(text,isFinal=true){const result=[{transcript:text}];result.isFinal=isFinal;this.onresult?.({resultIndex:0,results:[result]});}
+ }
+ return {Recognition,instances};
+}
+test('spoken answer stays editable, requires explicit submission and is never saved as a transcript',()=>{
+ const mock=mockRecognition();const env=boot({recognition:mock.Recognition});try{const {$,w}=env;
+ assert.equal(mock.instances.length,0);$('lessonCards').children[0].click();assert.equal(mock.instances.length,0);
+ $('qbSpeak').click();const mic=mock.instances[0];assert.equal(mic.started,true);assert.equal(mic.lang,'en-US');
+ mic.emit('Why did operating expenses increase in March',false);
+ assert.equal($('qbFeedback').hidden,true);assert.equal($('qbSpeak').getAttribute('aria-pressed'),'true');
+ mic.emit('Why did operating expenses increase in March?',true);mic.onend();
+ assert.equal($('qbStopMic').disabled,true);assert.equal($('qbFeedback').hidden,true);assert.match($('voiceNotice').textContent,/확인/);
+ $('qbForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ assert.match($('feedbackTitle').textContent,/잘했어요/);
+ const saved=w.localStorage.getItem(w.SFCore.KEY);assert.equal(saved.includes('operating expenses'),false);assert.equal(saved.includes('transcript'),false);
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('speech denial, network errors and unavailable recognition keep typed practice usable',()=>{
+ const mock=mockRecognition();const env=boot({recognition:mock.Recognition});try{const {$}=env;
+ $('lessonCards').children[0].click();
+ for(const [error,message] of [['not-allowed',/권한/],['network',/연결/],['no-speech',/들리지/]]){
+  $('qbSpeak').click();const mic=mock.instances.at(-1);mic.onerror({error});
+  assert.equal(mic.aborted,true);assert.equal($('qbSpeak').disabled,false);assert.equal($('qbStopMic').disabled,true);assert.match($('voiceNotice').textContent,message);
+ }
+ $('qbTypeAnswer').click();submit(env,'Why did operating expenses increase in March?');assert.match($('feedbackTitle').textContent,/잘했어요/);
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+ const unavailable=boot();try{unavailable.$('lessonCards').children[0].click();unavailable.$('qbSpeak').click();assert.match(unavailable.$('voiceNotice').textContent,/지원하지/);assert.equal(unavailable.$('qbAnswer').disabled,false);}finally{unavailable.dom.window.close();}
+});
+test('pausing, typing, navigation and backgrounding abort the microphone and discard late callbacks',()=>{
+ const mock=mockRecognition();const env=boot({recognition:mock.Recognition});try{const {$,w}=env;
+ $('lessonCards').children[0].click();
+ function active(){ $('qbSpeak').click();const mic=mock.instances.at(-1);return {mic,late:mic.onresult}; }
+ let {mic,late}=active();$('pauseQuestion').click();assert.equal(mic.aborted,true);late({resultIndex:0,results:[Object.assign([{transcript:'stale pause'}],{isFinal:true})]});assert.equal($('qbAnswer').value,'');
+ $('pauseQuestion').click();({mic}=active());$('qbAnswer').value='My own words';$('qbAnswer').dispatchEvent(new w.Event('input'));assert.equal(mic.aborted,true);assert.equal($('qbAnswer').value,'My own words');
+ ({mic}=active());$('qbTypeAnswer').click();assert.equal(mic.aborted,true);assert.match($('voiceNotice').textContent,/조용히/);
+ ({mic,late}=active());w.document.querySelector('[data-target="shadow"]').click();assert.equal(mic.aborted,true);
+ w.document.querySelector('[data-target="builder"]').click();$('qbAnswer').value='';late({resultIndex:0,results:[Object.assign([{transcript:'stale tab'}],{isFinal:true})]});assert.equal($('qbAnswer').value,'');
+ ({mic}=active());Object.defineProperty(w.document,'hidden',{value:true,configurable:true});w.document.dispatchEvent(new w.Event('visibilitychange'));assert.equal(mic.aborted,true);
+ Object.defineProperty(w.document,'hidden',{value:false,configurable:true});({mic}=active());w.dispatchEvent(new w.Event('pagehide'));assert.equal(mic.aborted,true);
+ ({mic}=active());$('backToLessons').click();assert.equal(mic.aborted,true);assert.equal($('qbHome').hidden,false);
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('recognition startup failure resets controls and manual token choice stops active recognition',()=>{
+ class Broken {start(){throw new Error('unavailable');}abort(){}}
+ const broken=boot({recognition:Broken});try{broken.$('lessonCards').children[0].click();broken.$('qbSpeak').click();assert.equal(broken.$('qbSpeak').disabled,false);assert.match(broken.$('voiceNotice').textContent,/시작할 수/);}finally{broken.dom.window.close();}
+ const mock=mockRecognition();const env=boot({recognition:mock.Recognition});try{env.$('lessonCards').children[0].click();env.$('qbSpeak').click();env.$('tokenBank').children[0].click();assert.equal(mock.instances[0].aborted,true);assert.ok(env.$('qbAnswer').value);assert.deepEqual(env.errors,[]);}finally{env.dom.window.close();}
 });
