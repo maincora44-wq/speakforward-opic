@@ -13,12 +13,133 @@ function boot(options={}) {
  if(options.recognition)w.SpeechRecognition=options.recognition;
  if(options.saved)w.localStorage.setItem('speakForward.questionBuilder.v1',options.saved);
  if(options.nextSaved)w.localStorage.setItem('speakForward.next.v1',options.nextSaved);
+ if(options.practiceSaved)w.localStorage.setItem('speakForward.practice.v1',options.practiceSaved);
  if(options.blockStorage)Object.defineProperty(w,'localStorage',{get(){throw new w.DOMException('Blocked','SecurityError');}});
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- for(const file of ['core.js','finance-data.js','lessons.js','legacy.js','app.js'])w.eval(fs.readFileSync(path.join(root,file),'utf8'));
+ for(const file of ['core.js','finance-data.js','lessons.js','practice-content.js','practice-core.js','legacy.js','practice.js','app.js'])w.eval(fs.readFileSync(path.join(root,file),'utf8'));
  return {dom,w,$:id=>w.document.getElementById(id),errors};
 }
 function submit(env,text){env.$('qbAnswer').value=text;env.$('qbForm').dispatchEvent(new env.w.Event('submit',{bubbles:true,cancelable:true}));}
+function submitDialogue(env,text){env.$('rpAnswer').value=text;env.$('rpForm').dispatchEvent(new env.w.Event('submit',{bubbles:true,cancelable:true}));}
+function openDialogue(env,index=0){
+ env.w.document.querySelector('[data-target="roleplay"]').click();
+ if(!env.$('rpExercise').hidden)env.$('rpHomeButton').click();
+ if(!env.$('rpSummary').hidden)env.$('rpSummaryHome').click();
+ env.$('scenarioCards').children[index].click();
+ if(env.$('replaceDialogueDialog').open)env.$('confirmDialogue').click();
+}
+function finishDialogue(env,index=0){
+ openDialogue(env,index);
+ for(const step of env.w.SFPracticeContent.scenarios[index].steps){submitDialogue(env,step.examples[0]);env.$('rpNext').click();}
+ env.$('rpFinish').click();
+}
+test('guided dialogue completes explicit goals, preserves first hint and never persists learner text',()=>{
+ const env=boot();try{const {$,w}=env;openDialogue(env);
+ const scenario=w.SFPracticeContent.scenarios[0];
+ submitDialogue(env,' ');assert.equal($('rpFeedback').hidden,true);assert.match($('rpAnswerNotice').textContent,/입력/);
+ submitDialogue(env,scenario.steps[0].errors[0][0]);assert.match($('rpFeedbackTitle').textContent,/살펴/);
+ $('rpRetry').click();submitDialogue(env,scenario.steps[0].examples[0]);assert.match($('rpFeedbackTitle').textContent,/일치/);$('rpNext').click();
+ const privateText='<img src=x onerror=private> I would like the documentation in advance.';
+ submitDialogue(env,privateText);assert.match($('rpFeedbackMessage').textContent,/자연스러운/);assert.equal($('rpConversation').querySelector('img'),null);$('rpNext').click();
+ for(const step of scenario.steps.slice(2)){submitDialogue(env,step.examples[0]);$('rpNext').click();}
+ assert.equal($('nextXP').textContent,'0 XP');$('rpFinish').click();$('rpFinish').click();
+ assert.equal($('nextXP').textContent,'40 XP');assert.match($('rpReward').textContent,/40 XP/);
+ const raw=w.localStorage.getItem(w.SFPracticeCore.KEY);assert.equal(raw.includes(privateText),false);assert.equal(raw.includes(scenario.steps[0].examples[0]),false);
+ assert.equal(JSON.parse(raw).errors.base_verb.count,1);
+ w.document.querySelector('[data-target="memory"]').click();assert.match($('memoryPatterns').textContent,/동사원형/);
+ $('memoryPatterns').querySelector('button').click();assert.equal($('qbExercise').hidden,false);assert.match($('qbPrompt').textContent,/비용/);
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('dialogue XP combines with question XP and repeats do not inflate totals',()=>{
+ const env=boot();try{finishFirstLesson(env);finishDialogue(env);assert.equal(env.$('nextXP').textContent,'110 XP');assert.equal(env.$('nextLevel').textContent,'레벨 2');
+ finishDialogue(env);assert.equal(env.$('nextXP').textContent,'110 XP');assert.match(env.$('rpReward').textContent,/\+0 XP/);assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('all three scenario routes complete, save their own goals and share one level total',()=>{
+ const env=boot();try{for(let index=0;index<3;index++)finishDialogue(env,index);
+ assert.equal(env.$('nextXP').textContent,'120 XP');assert.equal(env.$('nextLevel').textContent,'레벨 2');
+ const state=env.w.SFPractice.exportState();const day=env.w.SFCore.localDay();assert.equal(state.days[day].scenarios.length,3);assert.equal(state.days[day].turns.length,12);assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('dialogue TTS is stopped by microphone, navigation and pause without stale status callbacks',()=>{
+ const mock=mockRecognition(),env=boot({recognition:mock.Recognition});try{const {$,w}=env;const spoken=[];let cancelled=0;
+ w.SpeechSynthesisUtterance=class{constructor(text){this.text=text;}};w.speechSynthesis={speak:value=>spoken.push(value),cancel:()=>cancelled++};
+ openDialogue(env);$('rpListenTutor').click();assert.equal(spoken.length,1);const ended=spoken[0].onend;assert.equal($('practiceAudioBar').hidden,false);
+ $('rpSpeak').click();assert.ok(cancelled>0);assert.equal($('practiceAudioBar').hidden,true);ended();assert.match($('rpVoiceNotice').textContent,/마이크 연결/);
+ $('rpListenTutor').click();assert.equal(mock.instances.at(-1).aborted,true);$('rpPause').click();assert.equal($('practiceAudioBar').hidden,true);
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('legacy speech cannot append a late transcript after navigation to guided practice',()=>{
+ const mock=mockRecognition(),env=boot({recognition:mock.Recognition});try{const {$,w}=env;
+ w.document.querySelector('[data-target="exam"]').click();$('startSTT').click();const mic=mock.instances.at(-1);mic.emit('Yesterday I completed the report.',true);
+ const before=$('answer').value,late=mic.onresult;w.document.querySelector('[data-target="roleplay"]').click();
+ late({resultIndex:0,results:[Object.assign([{transcript:'stale private sentence'}],{isFinal:true})]});assert.equal($('answer').value,before);assert.equal(mic.aborted,true);assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('dialogue reload resumes paused feedback without learner text or duplicate attempts',()=>{
+ let env=boot();let practiceSaved;try{openDialogue(env);submitDialogue(env,'My private work details');practiceSaved=env.w.localStorage.getItem(env.w.SFPracticeCore.KEY);}finally{env.dom.window.close();}
+ env=boot({practiceSaved});try{env.w.document.querySelector('[data-target="roleplay"]').click();env.$('rpResume').click();
+ assert.equal(env.$('rpFeedback').hidden,false);assert.match(env.$('rpConversation').textContent,/저장하지 않아/);assert.equal(env.$('rpConversation').textContent.includes('My private'),false);
+ env.$('rpNext').click();assert.equal(env.$('rpPosition').textContent,'2 / 4');assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('saved expressions support recall, schedule persistence, filtering and removal',()=>{
+ const env=boot();try{const {$,w}=env;w.document.querySelector('[data-target="phrases"]').click();assert.equal($('phraseList').children.length,12);
+ $('phraseList').firstElementChild.querySelectorAll('button')[1].click();assert.equal($('phraseSavedCount').textContent,'1');
+ $('phraseSavedOnly').checked=true;$('phraseSavedOnly').dispatchEvent(new w.Event('change'));assert.equal($('phraseList').children.length,1);
+ $('startPhraseReview').click();assert.equal($('phraseReviewEnglish').hidden,true);$('phraseRemembered').click();assert.equal($('nextXP').textContent,'0 XP');
+ $('phraseReveal').click();assert.equal($('phraseReviewEnglish').hidden,false);$('phraseRemembered').click();$('phraseRemembered').click();assert.equal($('nextXP').textContent,'5 XP');
+ const saved=JSON.parse(w.localStorage.getItem(w.SFPracticeCore.KEY)),id=saved.bookmarks[0];assert.equal(saved.review[id].stage,1);assert.ok(saved.review[id].dueAt>Date.now());
+ $('startPhraseReview').click();$('phraseReveal').click();$('phraseRemembered').click();assert.equal(JSON.parse(w.localStorage.getItem(w.SFPracticeCore.KEY)).review[id].stage,1);
+ $('phraseList').firstElementChild.querySelectorAll('button')[1].click();assert.equal($('phraseSavedCount').textContent,'0');assert.equal($('phraseEmpty').hidden,false);assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('v3 backup roundtrip covers dialogue and bookmarks; v2 import preserves them',async()=>{
+ const env=boot();try{const {$,w}=env;finishDialogue(env);w.document.querySelector('[data-target="phrases"]').click();$('phraseList').firstElementChild.querySelectorAll('button')[1].click();
+ let blob;w.URL.createObjectURL=value=>{blob=value;return 'blob:backup';};w.URL.revokeObjectURL=()=>{};w.HTMLAnchorElement.prototype.click=function(){};
+ $('practiceExport').click();const text=await new Promise(resolve=>{const reader=new w.FileReader();reader.onload=()=>resolve(reader.result);reader.readAsText(blob);});const backup=JSON.parse(text);
+ assert.equal(backup.version,3);assert.equal(backup.practice.bookmarks.length,1);
+ w.confirm=()=>true;const load=async value=>{const raw=JSON.stringify(value);await $('importProgress').onchange({target:{files:[{size:raw.length,text:async()=>raw}],value:'backup'}});};
+ await load({version:3,builder:w.SFCore.freshState(),next:w.SFCore.Next.fresh(),practice:w.SFPracticeCore.fresh()});assert.equal($('nextXP').textContent,'0 XP');assert.equal($('phraseSavedCount').textContent,'0');
+ await load(backup);assert.equal($('nextXP').textContent,'40 XP');assert.equal($('phraseSavedCount').textContent,'1');
+ await load({version:2,builder:backup.builder,next:backup.next});assert.equal($('phraseSavedCount').textContent,'1');assert.equal($('nextXP').textContent,'40 XP');
+ const before=w.localStorage.getItem(w.SFPracticeCore.KEY);await load({...backup,practice:{version:9}});assert.match($('storageNotice').textContent,/실패/);assert.equal(w.localStorage.getItem(w.SFPracticeCore.KEY),before);
+  await load({...backup,practice:{...backup.practice,transcript:'private imported words'}});assert.match($('storageNotice').textContent,/복구/);assert.equal(w.localStorage.getItem(w.SFPracticeCore.KEY).includes('private imported'),false);
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('dialogue microphone is editable and explicit, cancels on pause, navigation and late callbacks',()=>{
+ const mock=mockRecognition(),env=boot({recognition:mock.Recognition});try{const {$,w}=env;openDialogue(env);$('rpSpeak').click();const mic=mock.instances.at(-1);assert.equal(mic.lang,'en-US');
+ mic.emit('Could we move the audit meeting to Friday?',true);assert.equal($('rpFeedback').hidden,true);assert.match($('rpAnswer').value,/Friday/);
+ const late=mic.onresult;$('rpPause').click();assert.equal(mic.aborted,true);$('rpAnswer').value='manual';late({resultIndex:0,results:[Object.assign([{transcript:'stale'}],{isFinal:true})]});assert.equal($('rpAnswer').value,'manual');
+ $('rpPause').click();$('rpSpeak').click();const next=mock.instances.at(-1);$('rpType').click();assert.equal(next.aborted,true);
+ $('rpSpeak').click();const last=mock.instances.at(-1);w.document.querySelector('[data-target="builder"]').click();assert.equal(last.aborted,true);
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('dialogue speech denial and unsupported browser preserve typing; background cancels recognition',()=>{
+ const mock=mockRecognition(),env=boot({recognition:mock.Recognition});try{const {$,w}=env;openDialogue(env);
+ for(const error of ['not-allowed','network','no-speech']){$('rpSpeak').click();mock.instances.at(-1).onerror({error});assert.equal($('rpSpeak').disabled,false);assert.equal($('rpAnswer').disabled,false);}
+ $('rpSpeak').click();const mic=mock.instances.at(-1);Object.defineProperty(w.document,'hidden',{value:true,configurable:true});w.document.dispatchEvent(new w.Event('visibilitychange'));assert.equal(mic.aborted,true);assert.equal($('rpAnswer').disabled,true);
+ Object.defineProperty(w.document,'hidden',{value:false,configurable:true});$('rpPause').click();delete w.SpeechRecognition;$('rpSpeak').click();assert.match($('rpVoiceNotice').textContent,/支持|サポート|지원/);
+ submitDialogue(env,w.SFPracticeContent.scenarios[0].steps[0].examples[0]);assert.equal($('rpFeedback').hidden,false);assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('dialogue persistence failure and other-tab edits are reported without blocking local learning',()=>{
+ const env=boot();try{const {$,w}=env;const original=w.Storage.prototype.setItem;w.Storage.prototype.setItem=function(key,value){if(key===w.SFPracticeCore.KEY)throw new Error('QuotaExceeded');return original.call(this,key,value);};
+ finishDialogue(env);assert.equal($('nextXP').textContent,'40 XP');assert.match($('practiceStorageNotice').textContent,/저장할 수 없/);assert.match($('rpReward').textContent,/현재 화면/);assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+ const stale=boot();try{openDialogue(stale);const external=JSON.stringify(stale.w.SFPracticeCore.fresh());stale.w.localStorage.setItem(stale.w.SFPracticeCore.KEY,external);
+ submitDialogue(stale,'an answer');assert.equal(stale.w.localStorage.getItem(stale.w.SFPracticeCore.KEY),external);assert.match(stale.$('practiceStorageNotice').textContent,/다른 창/);assert.deepEqual(stale.errors,[]);
+ }finally{stale.dom.window.close();}
+});
+test('changing scenarios asks before replacing progress and cancelling keeps the existing session',()=>{
+ const env=boot();try{const {$,w}=env;openDialogue(env);submitDialogue(env,'a response');const before=w.SFPractice.exportState().session.id;$('rpHomeButton').click();$('scenarioCards').children[1].click();assert.equal($('replaceDialogueDialog').open,true);$('cancelDialogue').click();assert.equal(w.SFPractice.exportState().session.id,before);
+ $('scenarioCards').children[1].click();$('confirmDialogue').click();assert.equal(w.SFPractice.exportState().session.scenarioId,'fx-talk-v1');assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
 test('another tab changing progress cannot be overwritten by a stale lesson save', () => {
  const env = boot(); try {
   const {$, w} = env; $('lessonCards').children[0].click();
@@ -126,7 +247,7 @@ test('Next dashboard updates path and quests only on completion and survives rel
  try { finishFirstLesson(env); assert.equal(env.$('nextXP').textContent, '70 XP'); assert.match(env.$('rewardNotice').textContent, /이미/); }
  finally { env.dom.window.close(); }
 });
-test('v2 export/import roundtrip restores both ledgers; v1 import preserves current Next progress', async () => {
+test('v3 export/import roundtrip restores ledgers; old imports preserve independent progress', async () => {
  const env = boot();
  try {
   const {$, w} = env; finishFirstLesson(env);
@@ -136,7 +257,8 @@ test('v2 export/import roundtrip restores both ledgers; v1 import preserves curr
   w.HTMLAnchorElement.prototype.click = function () {};
   $('exportProgress').click();
   const text = await new Promise(resolve => { const reader = new w.FileReader(); reader.onload = () => resolve(reader.result); reader.readAsText(exported); });
-  const backup = JSON.parse(text); assert.equal(backup.version, 2);
+  const backup = JSON.parse(text); assert.equal(backup.version, 3);
+  assert.equal(backup.practice.version, 1);
   assert.equal(backup.builder.version, 1); assert.equal(backup.next.version, 1);
   w.confirm = () => true;
   const load = async data => { const value = JSON.stringify(data); await $('importProgress').onchange({target:{files:[{size:value.length,text:async()=>value}],value:'test'}}); };

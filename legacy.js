@@ -23,7 +23,20 @@
     function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
     function analyze(){const raw=$('answer').value, lower=raw.toLowerCase(), words=lower.match(/[a-z]+(?:'[a-z]+)?/g)||[], sentences=raw.split(/[.!?]+/).filter(x=>x.trim()).length;$('wordCount').textContent=words.length;$('sentenceCount').textContent=sentences;const found=fillers.map(f=>[f,(lower.match(new RegExp('\\b'+esc(f)+'\\b','g'))||[]).length]).filter(x=>x[1]);$('fillerList').innerHTML=found.length?found.map(([f,n])=>`<span class="filler">${f} × ${n}</span>`).join(' '):'None yet';const adv=advanced.filter(w=>new RegExp('\\b'+w+'\\b').test(lower));const pastWords=words.filter(w=>w.endsWith('ed')||irregular.includes(w)).length;const feedback=[];feedback.push(words.length>=100?'✓ Strong answer length.':'Add detail: aim for at least 100 words.');feedback.push(sentences>=12&&sentences<=15?'✓ Sentence count is in the target range.':`Aim for 12–15 sentences (currently ${sentences}).`);feedback.push(adv.length?`✓ Strong vocabulary: ${adv.join(', ')}.`:'Try precise vocabulary: demanding, rewarding, crucial, unwind.');if(past&&words.length)feedback.push(pastWords/words.length>=.08?'✓ Past-tense signals are present.':'For a past story, add more past verbs (e.g., went, felt, managed, completed).');if(found.reduce((n,x)=>n+x[1],0)>4)feedback.push('Use fillers sparingly so your answer stays natural.');$('scoreFeedback').innerHTML=feedback.join('<br>');}
     $('answer').addEventListener('input',analyze);$('clearAnswer').onclick=()=>{$('answer').value='';analyze();};
-    $('startSTT').onclick=()=>{if(recognition){try{recognition.stop();}catch{}}const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){$('sttNotice').textContent='Speech recognition is not available here. Please type your response.';return;} recognition=new R();recognition.lang='en-US';recognition.continuous=true;recognition.interimResults=true;let final=$('answer').value.trim()+' ';recognition.onresult=e=>{let interim='';for(let i=e.resultIndex;i<e.results.length;i++)e.results[i].isFinal?final+=e.results[i][0].transcript+' ':interim+=e.results[i][0].transcript;$('answer').value=final+interim;analyze();};recognition.onerror=e=>{$('sttNotice').textContent=`Speech recognition: ${e.error}. You can continue by typing.`;};recognition.onend=()=>{$('sttNotice').textContent='Speech recognition stopped. You can continue by typing.';};try{recognition.start();$('sttNotice').textContent='Listening… speak in English.';}catch{$('sttNotice').textContent='Speech recognition could not start. Please type your response.';}};$('stopSTT').onclick=()=>recognition&&recognition.stop();
+    $('startSTT').onclick=()=>{
+      document.dispatchEvent(new Event('sf-stop-media'));
+      const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+      if(!R){$('sttNotice').textContent='Speech recognition is not available here. Please type your response.';return;}
+      recognition=new R();const active=recognition;
+      const current=()=>recognition===active&&!document.hidden&&!$('exam').classList.contains('hidden');
+      active.lang='en-US';active.continuous=true;active.interimResults=true;
+      let final=$('answer').value.trim()+' ';
+      active.onresult=e=>{if(!current())return;let interim='';for(let i=e.resultIndex;i<e.results.length;i++)e.results[i].isFinal?final+=e.results[i][0].transcript+' ':interim+=e.results[i][0].transcript;$('answer').value=final+interim;analyze();};
+      active.onerror=e=>{if(current())$('sttNotice').textContent=`Speech recognition: ${e.error}. You can continue by typing.`;};
+      active.onend=()=>{if(current()){$('sttNotice').textContent='Speech recognition stopped. You can continue by typing.';recognition=null;}};
+      try{active.start();$('sttNotice').textContent='Listening… speak in English.';}catch{stopLegacyMedia();$('sttNotice').textContent='Speech recognition could not start. Please type your response.';}
+    };
+    $('stopSTT').onclick=()=>{stopLegacyMedia();$('sttNotice').textContent='Speech recognition stopped. You can continue by typing.';};
     const introIds=['introHook','introJob','introHobby','introClose'];introIds.forEach(id=>{const saved=storage.getItem(store+id);if(saved)$(id).value=saved;$(id).addEventListener('input',()=>storage.setItem(store+id,$(id).value));});$('saveIntro').onclick=()=>{$('introNotice').textContent=legacyPersistent?'Saved on this device.':'Session only: browser storage is unavailable.';};$('listenIntro').onclick=()=>speak(introIds.map(id=>$(id).value).join(' '));
     let recorder, chunks=[], recordingURL, activeStream;
     function resetRecordingButtons(){ $('startRecord').disabled=false; $('stopRecord').disabled=true; }
@@ -59,7 +72,9 @@
     };
     $('stopRecord').onclick=()=>{if(recorder&&recorder.state!=='inactive')recorder.stop();resetRecordingButtons();};
     window.addEventListener('pagehide',()=>{activeStream?.getTracks().forEach(track=>track.stop());if(recordingURL)URL.revokeObjectURL(recordingURL);});
-    document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{repeat=false;if('speechSynthesis' in window)speechSynthesis.cancel();if(recognition){try{recognition.stop();}catch{}}if(recorder?.state==='recording')recorder.stop();}));
-    document.addEventListener('visibilitychange',()=>{if(document.hidden){repeat=false;if('speechSynthesis' in window)speechSynthesis.cancel();if(recognition){try{recognition.stop();}catch{}}if(recorder?.state==='recording')recorder.stop();}});
+    function stopLegacyMedia(){repeat=false;if('speechSynthesis' in window)speechSynthesis.cancel();if(recognition){const active=recognition;recognition=null;active.onresult=active.onerror=active.onend=null;try{active.abort?active.abort():active.stop();}catch{}}if(recorder?.state==='recording')recorder.stop();}
+    document.addEventListener('sf-stop-media',stopLegacyMedia);
+    document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',stopLegacyMedia));
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)stopLegacyMedia();});
     if(!legacyPersistent)$('legacyStorageNotice').hidden=false;
   })();
