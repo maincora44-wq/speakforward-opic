@@ -389,7 +389,6 @@
     const sessionId = state.session.id;
     const cursor = state.session.cursor;
     let heard = false;
-    let finalText = '';
     const prefix = $('qbAnswer').value.trim();
     const current = () => generation === voiceGeneration && recognition && state.session?.id === sessionId &&
       state.session.cursor === cursor && !state.session.paused && !feedback && currentModule === 'builder' && !document.hidden;
@@ -401,14 +400,9 @@
       };
       recognition.onresult = event => {
         if (!current()) return;
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) finalText += result[0].transcript + ' ';
-          else interim += result[0].transcript;
-        }
-        heard = Boolean((finalText + interim).trim());
-        $('qbAnswer').value = [prefix, (finalText + interim).trim()].filter(Boolean).join(' ');
+        const transcript = C.speechTranscript(prefix, event.results);
+        heard = transcript.heard;
+        $('qbAnswer').value = transcript.text;
         answerChanged();
         $('voiceNotice').textContent = '듣고 있어요… 인식된 문장은 아래에 표시됩니다. 자동으로 제출하지 않아요.';
       };

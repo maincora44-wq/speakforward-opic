@@ -250,17 +250,15 @@
     const R = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!R) { $('rpVoiceNotice').textContent = '이 브라우저는 음성 인식을 지원하지 않아요. 직접 입력으로 계속하세요.'; return; }
     const token = generation, sessionId = state.session.id, cursor = state.session.cursor;
-    const prefix = $('rpAnswer').value.trim(); let final = '', heard = false;
+    const prefix = $('rpAnswer').value.trim(); let heard = false;
     const active = () => recognition && generation === token && state.session?.id === sessionId && state.session.cursor === cursor && !state.session.paused && !feedback && !document.hidden && !$('roleplay').classList.contains('hidden');
     try {
       recognition = new R(); recognition.lang = 'en-US'; recognition.continuous = false; recognition.interimResults = true;
       recognition.onstart = () => { if (active()) $('rpVoiceNotice').textContent = '듣고 있어요… 영어로 답변하세요. 인식 문장은 자동 제출하지 않아요.'; };
       recognition.onresult = event => {
-        if (!active()) return; let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i]; if (result.isFinal) final += result[0].transcript + ' '; else interim += result[0].transcript;
-        }
-        heard = Boolean((final+interim).trim()); $('rpAnswer').value = [prefix,(final+interim).trim()].filter(Boolean).join(' ').slice(0,1000);
+        if (!active()) return;
+        const transcript = C.speechTranscript(prefix, event.results);
+        heard = transcript.heard; $('rpAnswer').value = transcript.text.slice(0,1000);
       };
       recognition.onerror = event => {
         if (!active()) return;

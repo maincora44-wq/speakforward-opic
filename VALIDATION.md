@@ -1,4 +1,14 @@
-# SpeakForward Next 2.1 guided practice validation — 2026-10-20
+# SpeakForward 2.1.1 speech replay regression — 2026-10-20
+
+Three screen-level regression tests failed before the fix: replaying the same final result produced `My draft. I went I went` in OPIc, question lessons and guided dialogue. A fourth test reproduced stale recognition overwriting manual OPIc edits/clears.
+
+All three surfaces now rebuild from the current full result list through `SFCore.speechTranscript`; they no longer append final text on every event. Tests cover revised final slots, replayed finals, cumulative result lists, zero/reset resultIndex, changed/removed interim slots, a preserved draft prefix and intentional word/phrase repetition. OPIc editing/clearing aborts recognition; stale callbacks and fresh-session prefixes are checked.
+
+Passed: 68/68 Node/jsdom tests plus 3/3 Python tests, syntax checks and git diff --check. All 15 localhost shell resources matched expected MIME and source bytes. Recognition events are mocked; no physical Android microphone or live provider was observed. Version: 2.1.1, cache: v6. No paid API added. See [SPEECH-FIX.md](SPEECH-FIX.md).
+
+---
+
+# Historical SpeakForward Next 2.1 guided practice validation — 2026-10-20
 
 Branch: `feat/complete-guided-practice`, based on `1fedac29`.
 Clean `npm ci --ignore-scripts` completed. **64/64 Node/jsdom tests + 3/3 Python unittest tests passed.** Existing learning/review, FDR teaching data and backup behavior remain covered. New cases cover all three scenario routes, explicit dialogue completion/retry/resume, first-attempt hint accounting, unknown-answer comparison without fabricated semantic grading, combined daily XP, bookmark recall/schedules, v3 roundtrip and v2/v1 preservation, storage failure/stale tabs, transcript minimization, speech denial/unavailable/background/cancellation and stale TTS/recognition callbacks. Recognition/TTS are mocked.

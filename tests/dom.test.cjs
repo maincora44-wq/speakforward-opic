@@ -344,9 +344,47 @@ function mockRecognition() {
   start(){this.started=true;}
   abort(){this.aborted=true;}
   emit(text,isFinal=true){const result=[{transcript:text}];result.isFinal=isFinal;this.onresult?.({resultIndex:0,results:[result]});}
+  emitResults(items,resultIndex=0){const results=items.map(([transcript,isFinal])=>Object.assign([{transcript}],{isFinal}));this.onresult?.({resultIndex,results});}
  }
  return {Recognition,instances};
 }
+for(const surface of ['exam','builder','roleplay'])test(`${surface}: replayed or revised speech slots replace the current snapshot without accumulating words`,()=>{
+ const mock=mockRecognition(),env=boot({recognition:mock.Recognition});try{const {$,w}=env;
+ let field,start;
+ if(surface==='exam'){w.document.querySelector('[data-target="exam"]').click();field=$('answer');start=$('startSTT');}
+ else if(surface==='builder'){$('lessonCards').children[0].click();field=$('qbAnswer');start=$('qbSpeak');}
+ else{openDialogue(env);field=$('rpAnswer');start=$('rpSpeak');}
+ field.value='My draft.';start.click();const mic=mock.instances.at(-1);
+ const trace=[
+  {parts:[['I went',false]],index:0,text:'I went'},
+  {parts:[['I went',true]],index:0,text:'I went'},
+  {parts:[['I went',true]],index:0,text:'I went'},
+  {parts:[['I went to Busan.',true]],index:0,text:'I went to Busan.'},
+  {parts:[['I went to Busan.',true],['It was',false]],index:0,text:'I went to Busan. It was'},
+  {parts:[['I went to Busan.',true],['It was a rewarding trip.',false]],index:1,text:'I went to Busan. It was a rewarding trip.'},
+  {parts:[['I went to Busan.',true]],index:1,text:'I went to Busan.'},
+  {parts:[['I went to Busan.',true],['It was rewarding.',true]],index:0,text:'I went to Busan. It was rewarding.'},
+  {parts:[['I went to Busan.',true],['It was rewarding.',true]],index:0,text:'I went to Busan. It was rewarding.'}
+ ];
+ for(const event of trace){mic.emitResults(event.parts,event.index);assert.equal(field.value.trim(),'My draft. '+event.text);}
+ mic.emitResults([['It was very very rewarding.',true],['I agree.',true],['I agree.',true]],0);
+ assert.equal(field.value,'My draft. It was very very rewarding. I agree. I agree.');
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
+test('OPIc editing or clearing during recognition cancels old callbacks; a fresh session uses the edited prefix once',()=>{
+ const mock=mockRecognition(),env=boot({recognition:mock.Recognition});try{const {$,w}=env;
+ w.document.querySelector('[data-target="exam"]').click();$('answer').value='Original draft.';$('startSTT').click();
+ let mic=mock.instances.at(-1);mic.emit('I went to Busan.',true);const late=mic.onresult;
+ $('answer').value='My correction.';$('answer').dispatchEvent(new w.Event('input'));assert.equal(mic.aborted,true);
+ late({resultIndex:0,results:[Object.assign([{transcript:'stale original'}],{isFinal:true})]});assert.equal($('answer').value,'My correction.');
+ $('startSTT').click();mic=mock.instances.at(-1);mic.emit('It was rewarding.',true);mic.emit('It was rewarding.',true);
+ assert.equal($('answer').value,'My correction. It was rewarding.');
+ const afterClear=mic.onresult;$('clearAnswer').click();assert.equal(mic.aborted,true);assert.equal($('answer').value,'');
+ afterClear({resultIndex:0,results:[Object.assign([{transcript:'stale after clear'}],{isFinal:true})]});assert.equal($('answer').value,'');assert.equal($('wordCount').textContent,'0');
+ assert.deepEqual(env.errors,[]);
+ }finally{env.dom.window.close();}
+});
 test('spoken answer stays editable, requires explicit submission and is never saved as a transcript',()=>{
  const mock=mockRecognition();const env=boot({recognition:mock.Recognition});try{const {$,w}=env;
  assert.equal(mock.instances.length,0);$('lessonCards').children[0].click();assert.equal(mock.instances.length,0);

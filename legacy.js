@@ -22,7 +22,11 @@
     const fillers=['well, let me see','to be honest','honestly speaking','what i mean is','you know','i mean','actually','in fact','at the end of the day']; const advanced=['demanding','rewarding','compliance','crucial','unwind','initiative','deadline','stakeholder','efficient','consistent']; const irregular=['went','had','felt','made','took','was','were','did','got','saw','told','thought','came','became'];
     function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
     function analyze(){const raw=$('answer').value, lower=raw.toLowerCase(), words=lower.match(/[a-z]+(?:'[a-z]+)?/g)||[], sentences=raw.split(/[.!?]+/).filter(x=>x.trim()).length;$('wordCount').textContent=words.length;$('sentenceCount').textContent=sentences;const found=fillers.map(f=>[f,(lower.match(new RegExp('\\b'+esc(f)+'\\b','g'))||[]).length]).filter(x=>x[1]);$('fillerList').innerHTML=found.length?found.map(([f,n])=>`<span class="filler">${f} × ${n}</span>`).join(' '):'None yet';const adv=advanced.filter(w=>new RegExp('\\b'+w+'\\b').test(lower));const pastWords=words.filter(w=>w.endsWith('ed')||irregular.includes(w)).length;const feedback=[];feedback.push(words.length>=100?'✓ Strong answer length.':'Add detail: aim for at least 100 words.');feedback.push(sentences>=12&&sentences<=15?'✓ Sentence count is in the target range.':`Aim for 12–15 sentences (currently ${sentences}).`);feedback.push(adv.length?`✓ Strong vocabulary: ${adv.join(', ')}.`:'Try precise vocabulary: demanding, rewarding, crucial, unwind.');if(past&&words.length)feedback.push(pastWords/words.length>=.08?'✓ Past-tense signals are present.':'For a past story, add more past verbs (e.g., went, felt, managed, completed).');if(found.reduce((n,x)=>n+x[1],0)>4)feedback.push('Use fillers sparingly so your answer stays natural.');$('scoreFeedback').innerHTML=feedback.join('<br>');}
-    $('answer').addEventListener('input',analyze);$('clearAnswer').onclick=()=>{$('answer').value='';analyze();};
+    $('answer').addEventListener('input',()=>{
+      if(recognition){stopLegacyMedia();$('sttNotice').textContent='Speech recognition stopped while editing. You can continue by typing.';}
+      analyze();
+    });
+    $('clearAnswer').onclick=()=>{stopLegacyMedia();$('answer').value='';analyze();$('sttNotice').textContent='Answer cleared. Start speech-to-text again when ready.';};
     $('startSTT').onclick=()=>{
       document.dispatchEvent(new Event('sf-stop-media'));
       const R=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -30,8 +34,8 @@
       recognition=new R();const active=recognition;
       const current=()=>recognition===active&&!document.hidden&&!$('exam').classList.contains('hidden');
       active.lang='en-US';active.continuous=true;active.interimResults=true;
-      let final=$('answer').value.trim()+' ';
-      active.onresult=e=>{if(!current())return;let interim='';for(let i=e.resultIndex;i<e.results.length;i++)e.results[i].isFinal?final+=e.results[i][0].transcript+' ':interim+=e.results[i][0].transcript;$('answer').value=final+interim;analyze();};
+      const prefix=$('answer').value;
+      active.onresult=e=>{if(!current())return;$('answer').value=window.SFCore.speechTranscript(prefix,e.results).text;analyze();};
       active.onerror=e=>{if(current())$('sttNotice').textContent=`Speech recognition: ${e.error}. You can continue by typing.`;};
       active.onend=()=>{if(current()){$('sttNotice').textContent='Speech recognition stopped. You can continue by typing.';recognition=null;}};
       try{active.start();$('sttNotice').textContent='Listening… speak in English.';}catch{stopLegacyMedia();$('sttNotice').textContent='Speech recognition could not start. Please type your response.';}
