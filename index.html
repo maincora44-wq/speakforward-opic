@@ -11,6 +11,7 @@
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <link rel="stylesheet" href="./styles.css" />
   <script src="./core.js" defer></script>
+  <script src="./finance-data.js" defer></script>
   <script src="./lessons.js" defer></script>
   <script src="./legacy.js" defer></script>
   <script src="./app.js" defer></script>
@@ -32,31 +33,43 @@
     <section id="builder" class="panel" aria-label="5분 질문 연습">
       <div id="storageNotice" class="notice" role="status" hidden></div>
       <div id="qbHome">
+        <section class="next-dashboard" aria-labelledby="nextTitle">
+          <div><span class="eyebrow">SPEAKFORWARD NEXT</span><h2 id="nextTitle">오늘도 한 단계 앞으로</h2><p>수업을 마치며 자신감을 쌓아 보세요.</p></div>
+          <div class="xp-card"><div class="xp-heading"><strong id="nextLevel">레벨 1</strong><strong id="nextXP">0 XP</strong></div><progress id="nextLevelProgress" max="100" value="0" aria-label="다음 레벨까지 진행"></progress><p id="nextLevelText">0 / 100 XP</p><span id="todayXP">오늘 0 XP</span></div>
+        </section>
+        <section class="quests-card" aria-labelledby="questTitle"><h3 id="questTitle">오늘의 퀘스트</h3><p class="subtle">기기 날짜 기준 · 수업의 ‘완료’를 누르면 자동 반영돼요.</p><ul id="dailyQuests">
+          <li><span></span><strong></strong><progress value="0" max="6" aria-label="문항 6개 마무리"></progress></li>
+          <li><span></span><strong></strong><progress value="0" max="1" aria-label="수업 또는 복습 완료"></progress></li>
+          <li><span></span><strong></strong><progress value="0" max="3" aria-label="기한이 된 질문 3개 복습"></progress></li>
+        </ul><p class="subtle">복습할 문항이 없으면 다른 퀘스트부터 시작하세요. 같은 날 같은 문항의 XP는 한 번만 지급해요.</p></section>
         <section class="builder-hero">
-          <div class="hero-copy"><span class="eyebrow">YOUR DAILY ENGLISH MOMENT</span><h2 id="builderTitle" tabindex="-1">오늘의 5분,<br>질문하는 자신감.</h2><p>머릿속의 영어를 회의 속 한 문장으로.<br>질문 어순부터 글로벌 감사 미팅까지 연습해요.</p><div class="hero-tags"><span>24개 원본 문항</span><span>가입 없이 무료</span><span>오답 복습</span></div></div>
+          <div class="hero-copy"><span class="eyebrow">YOUR DAILY ENGLISH MOMENT</span><h2 id="builderTitle" tabindex="-1">오늘의 5분,<br>질문하는 자신감.</h2><p>머릿속의 영어를 회의 속 한 문장으로.<br>질문 어순부터 글로벌 감사 미팅까지 연습해요.</p><div class="hero-tags"><span>30개 원본 문항</span><span>가입 없이 무료</span><span>오답 복습</span></div></div>
           <div class="hero-note" aria-label="오늘 연습할 표현"><span class="note-label">ONE QUESTION, ONE STEP</span><p lang="en">Could you clarify<br>the accounting policy?</p><span>작은 질문 하나가, 대화를 앞으로.</span><div class="note-line"></div><span class="note-number">SPEAK / FORWARD ↗</span></div>
         </section>
         <div class="learning-stats"><div><strong id="qbStreak">0일</strong><span>질문 연습 연속 학습</span></div><div><strong id="completedDays">0</strong><span>누적 학습일</span></div><div><strong><span id="reviewCount">0</span>개</strong><span>지금 복습할 문항</span></div></div>
         <section id="resumeBox" class="resume-card" hidden><div><strong>이어서 할 수 있어요</strong><p id="resumeText"></p></div><button id="resumeLesson" class="primary">학습 이어가기</button></section>
-        <div class="section-heading"><div><span class="eyebrow">BUILD YOUR QUESTION</span><h3>오늘 어떤 대화를 준비할까요?</h3></div><span class="subtle">각 6문항 · 약 5분</span></div>
+        <div class="section-heading"><div><span class="eyebrow">YOUR LEARNING PATH</span><h3>오늘 어떤 대화를 준비할까요?</h3><p class="subtle">01부터 차근차근 · 원하는 단계부터 시작해도 좋아요.</p></div><span class="subtle">각 6문항 · 약 5분</span></div>
         <div id="lessonCards" class="lesson-grid"></div>
         <section class="review-card"><div><span class="eyebrow">MAKE IT STICK</span><h3>다시 만나면, 더 자연스럽게.</h3><p id="reviewHint"></p><ul id="reviewList" class="review-list"></ul></div><button id="startReview" class="primary">복습 시작</button></section>
-        <details class="help-card"><summary>안드로이드 설치 · 기록 보관 · 사용 안내</summary><p id="installHelp">안드로이드 Chrome에서 이 페이지를 열고 ⋮ 메뉴 → ‘홈 화면에 추가’ 또는 ‘앱 설치’를 선택하세요. 메뉴 이름은 브라우저 버전에 따라 달라질 수 있어요.</p><button id="installApp" class="primary" hidden>홈 화면에 설치</button><p>처음 한 번 인터넷에 연결해 앱을 열면 텍스트 수업을 오프라인에서도 사용할 수 있어요. 영어 음성은 기기·브라우저에 따라 인터넷이 필요할 수 있습니다.</p><p>기록은 이 기기의 브라우저에만 남습니다. 브라우저 데이터 삭제·기기 변경 전에 학습 기록을 내보내세요. 음성 인식은 브라우저 제공자의 네트워크를 사용할 수 있으며, 요청한 경우에만 마이크를 켭니다.</p><div class="button-row"><button id="exportProgress" class="secondary">학습 기록 내보내기</button><label class="secondary file-button">학습 기록 가져오기<input id="importProgress" type="file" accept="application/json,.json" class="sr-only"></label></div><p class="subtle">내보내기는 Question Builder 진행 정보만 포함해요. 자기소개 문장·녹음은 포함하지 않습니다. 이 앱은 등록된 예시를 기준으로 피드백하며, 공식 OPIc 성적이나 발음 점수를 평가하지 않습니다.</p></details>
+        <details class="help-card"><summary>안드로이드 설치 · 기록 보관 · 사용 안내</summary><p id="installHelp">안드로이드 Chrome에서 이 페이지를 열고 ⋮ 메뉴 → ‘홈 화면에 추가’ 또는 ‘앱 설치’를 선택하세요. 메뉴 이름은 브라우저 버전에 따라 달라질 수 있어요.</p><button id="installApp" class="primary" hidden>홈 화면에 설치</button><p>처음 한 번 인터넷에 연결해 앱을 열면 텍스트 수업을 오프라인에서도 사용할 수 있어요. 영어 음성은 기기·브라우저에 따라 인터넷이 필요할 수 있습니다.</p><p>기록은 이 기기의 브라우저에만 남습니다. 브라우저 데이터 삭제·기기 변경 전에 학습 기록을 내보내세요. 음성 인식은 브라우저 제공자의 네트워크를 사용할 수 있으며, 요청한 경우에만 마이크를 켭니다.</p><div class="button-row"><button id="exportProgress" class="secondary">학습 기록 내보내기</button><label class="secondary file-button">학습 기록 가져오기<input id="importProgress" type="file" accept="application/json,.json" class="sr-only"></label></div><p class="subtle">백업에는 질문 연습과 XP·퀘스트·학습 경로를 포함해요. 이전 형식의 백업도 가져올 수 있어요. 자기소개 문장·녹음은 포함하지 않습니다. 이 앱은 등록된 예시를 기준으로 피드백하며, 공식 OPIc 성적이나 발음 점수를 평가하지 않습니다.</p></details>
       </div>
       <section id="qbExercise" class="exercise-shell" hidden>
         <div class="exercise-top"><button id="backToLessons" class="text-button">← 수업 목록</button><span id="qbPosition"></span><button id="pauseQuestion" class="secondary">잠시 멈춤</button></div>
         <progress id="qbProgress" max="6" value="0" aria-label="수업 진행"></progress>
         <div class="exercise-meta"><span id="qbSkill" class="eyebrow"></span><span><b id="qbTime">00:00</b> <small id="timeGoal">목표 5분 · 시간 제한은 없어요</small></span></div>
         <p id="pauseNotice" class="notice" hidden>잠시 쉬는 중이에요. ‘이어서 학습’을 누르면 계속할 수 있어요.</p>
-        <h2 id="qbPrompt" tabindex="-1"></h2><p class="subtle">영어 질문을 말하거나 직접 입력하세요. 인식된 문장을 확인한 뒤 답안을 제출해요.</p>
+        <aside id="financeContext" class="finance-context" aria-label="과거 환율 학습 자료" hidden><strong>과거 환율로 연습해요</strong><p id="financePeriod"></p><p id="financeRates" lang="en"></p><p class="subtle">단위: 1 USD당 KRW · 기간 양끝 비교 · 현재 시세가 아닌 학습 자료예요.</p><a id="financeSource" target="_blank" rel="noopener noreferrer">FRED DEXKOUS 원자료</a></aside>
+        <h2 id="qbPrompt" tabindex="-1"></h2><p id="exerciseHelp" class="subtle">영어 질문을 말하거나 직접 입력하세요. 인식된 문장을 확인한 뒤 답안을 제출해요.</p>
+        <p id="gapSentence" class="gap-sentence" lang="en" hidden></p>
+        <div id="answerChoices" class="answer-choices" aria-label="답변 선택지" hidden></div>
         <div class="button-row"><button id="qbListen" class="secondary">▷ 예시 질문 듣기</button><button id="qbStopAudio" class="text-button">재생 멈춤</button></div><p id="audioNotice" class="subtle" role="status"></p>
         <div class="button-row" aria-label="답변 입력 방법"><button id="qbSpeak" type="button" class="secondary" aria-pressed="false" aria-describedby="voicePrivacy">🎙 말로 답하기</button><button id="qbStopMic" type="button" class="secondary" disabled>마이크 멈춤</button><button id="qbTypeAnswer" type="button" class="text-button">조용히 · 직접 입력</button></div>
         <p id="voiceNotice" class="subtle" role="status" aria-live="polite">말하기는 선택 사항이에요. 직접 입력이나 단어 선택으로도 수업을 마칠 수 있어요.</p><p id="voicePrivacy" class="subtle">마이크는 ‘말로 답하기’를 누를 때만 켜집니다. 음성 인식에 브라우저 제공자의 네트워크가 사용될 수 있어요. 인식 결과는 학습 기록에 저장하지 않으며 발음 점수는 평가하지 않습니다.</p>
-        <form id="qbForm"><div id="orderHelp"><p class="field-label">단어를 순서대로 누르거나, 아래에 직접 입력하세요.</p><div id="tokenBank" class="token-bank" aria-label="선택할 단어"></div><div id="chosenTokens" class="chosen-tokens" aria-label="선택한 단어, 누르면 제거"></div></div><label for="qbAnswer" class="field-label">나의 질문</label><textarea id="qbAnswer" rows="3" placeholder="Write your question here…" lang="en" autocomplete="off" autocapitalize="sentences" spellcheck="false"></textarea><p id="answerNotice" role="status" class="error-notice"></p><div class="button-row"><button id="checkQuestion" type="submit" class="primary">답안 확인</button><button id="clearQuestion" type="button" class="text-button">다시 쓰기</button></div></form>
+        <form id="qbForm"><div id="orderHelp"><p class="field-label">단어를 순서대로 누르거나, 아래에 직접 입력하세요.</p><div id="tokenBank" class="token-bank" aria-label="선택할 단어"></div><div id="chosenTokens" class="chosen-tokens" aria-label="선택한 단어, 누르면 제거"></div></div><label for="qbAnswer" class="field-label">나의 답변</label><textarea id="qbAnswer" rows="3" placeholder="Write your answer here…" lang="en" autocomplete="off" autocapitalize="sentences" spellcheck="false"></textarea><p id="answerNotice" role="status" class="error-notice"></p><div class="button-row"><button id="checkQuestion" type="submit" class="primary">답안 확인</button><button id="clearQuestion" type="button" class="text-button">다시 쓰기</button></div></form>
         <div id="qbFeedback" class="feedback" role="status" aria-atomic="true" hidden><h3 id="feedbackTitle"></h3><p id="feedbackMessage"></p><p id="feedbackAnswer" class="answer-example" lang="en"></p><span id="feedbackTags"></span></div>
         <div class="button-row feedback-actions"><button id="retryQuestion" class="secondary" hidden>한 번 더 연습</button><button id="nextQuestion" class="primary" hidden>다음 질문</button></div>
       </section>
-      <section id="qbSummary" class="summary-card" hidden><span class="eyebrow">ONE STEP FORWARD</span><h2 id="summaryTitle" tabindex="-1">좋아요. 오늘도 한 걸음!</h2><p class="summary-score" id="summaryScore"></p><p id="summaryText"></p><p id="completionNotice" role="status"></p><div class="button-row"><button id="finishLesson" class="primary">오늘의 학습 완료</button><button id="summaryHome" class="secondary">수업 목록</button></div></section>
+      <section id="qbSummary" class="summary-card" hidden><span class="eyebrow">ONE STEP FORWARD</span><h2 id="summaryTitle" tabindex="-1">좋아요. 오늘도 한 걸음!</h2><p class="summary-score" id="summaryScore"></p><p id="summaryText"></p><p id="completionNotice" role="status"></p><p id="rewardNotice" role="status"></p><div class="button-row"><button id="finishLesson" class="primary">오늘의 학습 완료</button><button id="summaryHome" class="secondary">수업 목록</button></div></section>
       <dialog id="replaceLessonDialog"><h3>진행 중인 수업이 있어요</h3><p>새 수업을 시작하면 현재 수업의 이어하기가 교체됩니다. 이미 제출한 문항의 복습 기록은 유지돼요.</p><div class="button-row"><button id="cancelNewLesson" class="secondary">취소</button><button id="confirmNewLesson" class="primary">새 수업 시작</button></div></dialog>
     </section>
 

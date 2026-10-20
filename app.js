@@ -5,9 +5,13 @@
   const $ = id => document.getElementById(id);
   const tagNames = { question_word_order: '질문 어순', auxiliary_verb: '조동사', base_verb: '동사원형',
     subject_question: '주어 의문문', tense: '시제', politeness: '정중한 요청', needs_review: '예시 비교' };
-  let memory = null;
   let persistent = true;
   let state;
+  let nextState = C.Next.fresh();
+  let nextPersistent = true;
+  let completionXP = null;
+  let builderSnapshot = null;
+  let nextSnapshot = null;
   let feedback = false;
   let selected = [];
   let tick = performance.now();
@@ -18,24 +22,68 @@
   function notice(text) { $('storageNotice').textContent = text; $('storageNotice').hidden = !text; }
   try {
     const raw = localStorage.getItem(C.KEY);
+    builderSnapshot = raw;
     const restored = C.restore(raw, bank, Date.now());
     state = restored.state;
     if (restored.repaired) notice('일부 학습 기록을 복구했습니다. 유효하지 않은 복습 일정은 지금으로 조정했습니다.');
-    localStorage.setItem(C.KEY, JSON.stringify(state));
   } catch {
     state = state || C.freshState(); persistent = false;
     notice('이 브라우저에 저장할 수 없습니다. 현재 화면에서 학습할 수 있지만 닫으면 새 기록이 사라집니다.');
   }
+  try {
+    nextSnapshot = localStorage.getItem(C.Next.KEY);
+    const restored = C.Next.restore(nextSnapshot, bank, lessons);
+    nextState = restored.state;
+    if (restored.repaired) notice('XP·퀘스트 기록의 유효하지 않은 항목을 복구했습니다. 기존 복습 기록은 유지됩니다.');
+  } catch { nextPersistent = false; notice('XP·퀘스트는 현재 화면에서만 유지됩니다. 기록 내보내기로 보관해 주세요.'); }
+  function storageConflict() {
+    persistent = false; nextPersistent = false;
+    notice('다른 창에서 학습 기록이 바뀌어 이 창의 자동 저장을 멈췄어요. 현재 진행을 내보낸 뒤 다른 창을 닫고 새로고침하세요.');
+  }
+  window.addEventListener('storage', event => {
+    if (event.storageArea && event.storageArea !== localStorage) return;
+    if (event.key === null || (event.key === C.KEY && event.newValue !== builderSnapshot) ||
+        (event.key === C.Next.KEY && event.newValue !== nextSnapshot)) storageConflict();
+  });
   function save() {
-    memory = JSON.stringify(state);
-    if (persistent) try { localStorage.setItem(C.KEY, memory); }
+    // Also detect changes when a browser delays storage events in a background tab.
+    try {
+      if ((persistent && localStorage.getItem(C.KEY) !== builderSnapshot) ||
+          (nextPersistent && localStorage.getItem(C.Next.KEY) !== nextSnapshot)) { storageConflict(); return; }
+    } catch { /* Writes below surface unavailable storage, with the right ledger. */ }
+    const memory = JSON.stringify(state);
+    if (persistent) try { localStorage.setItem(C.KEY, memory); builderSnapshot = memory; }
     catch { persistent = false; notice('저장 공간을 사용할 수 없어 세션 전용 모드로 전환했습니다. 기록 내보내기로 보관해 주세요.'); }
+    if (nextPersistent) try { const raw = JSON.stringify(nextState); localStorage.setItem(C.Next.KEY, raw); nextSnapshot = raw; }
+    catch { nextPersistent = false; notice('XP·퀘스트를 저장할 수 없습니다. 기록 내보내기로 보관해 주세요.'); }
   }
   function button(text, action, className = 'secondary') {
     const node = document.createElement('button'); node.type = 'button';
     node.className = className; node.textContent = text; node.addEventListener('click', action); return node;
   }
   function refreshHome() {
+    const overview = C.Next.overview(nextState, C.localDay(), lessons);
+    $('nextXP').textContent = overview.xp + ' XP';
+    $('nextLevel').textContent = '레벨 ' + overview.level;
+    $('nextLevelProgress').value = overview.levelXP;
+    $('nextLevelText').textContent = overview.levelXP + ' / 100 XP · 다음 레벨까지 ' + (100 - overview.levelXP) + ' XP';
+    $('todayXP').textContent = '오늘 ' + overview.today.xp + ' XP';
+    // Stable nodes keep keyboard focus when the home timer refreshes.
+    overview.today.quests.forEach((quest, index) => {
+      const row = $('dailyQuests').children[index];
+      row.querySelector('span').textContent = quest.title + ' · ' + Math.min(quest.value, quest.goal) + '/' + quest.goal;
+      row.querySelector('strong').textContent = quest.value >= quest.goal ? '완료 · +10 XP' : '+10 XP';
+      row.querySelector('progress').value = Math.min(quest.value, quest.goal);
+      row.querySelector('progress').max = quest.goal;
+    });
+    overview.path.forEach((step, index) => {
+      const card = $('lessonCards').children[index];
+      if (!card) return;
+      card.classList.toggle('path-complete', step.complete);
+      if (step.id === overview.recommended) card.setAttribute('aria-current', 'step');
+      else card.removeAttribute('aria-current');
+      card.querySelector('small').textContent = (step.complete ? '완료 · 다시 연습' : step.id === overview.recommended ? '추천 단계 · 시작하기' : '자유롭게 시작하기') + ' · 6문항 →';
+    });
     const due = C.dueItems(state.review, bank, Date.now(), Infinity);
     $('reviewCount').textContent = due.length;
     $('startReview').disabled = !due.length;
@@ -78,7 +126,7 @@
     if (!ids.length) return;
     stopRecognition(); stopSpeech();
     state.session = C.newSession(ids, mode, Date.now(), crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random());
-    tick = performance.now(); save(); renderExercise();
+    completionXP = null; tick = performance.now(); save(); renderExercise();
   }
   function renderTokens(exercise) {
     selected = []; $('tokenBank').replaceChildren(); $('chosenTokens').replaceChildren();
@@ -102,7 +150,28 @@
     for (const node of $('tokenBank').children) node.disabled = selected.some(token => token.id === Number(node.dataset.tokenId));
   }
   function clearAnswer() {
-    selected = []; updateChosen(); $('qbAnswer').focus();
+    selected = []; updateChosen(); renderPause(); $('qbAnswer').focus();
+  }
+  function renderFormats(exercise) {
+    $('answerChoices').replaceChildren();
+    $('answerChoices').hidden = exercise.kind !== 'choice';
+    $('gapSentence').hidden = exercise.kind !== 'gap';
+    $('gapSentence').textContent = exercise.gap || '';
+    $('exerciseHelp').textContent = exercise.kind === 'choice' ? '알맞은 문장을 고르고 답안 확인을 눌러 주세요. 직접 입력해도 좋아요.' :
+      exercise.kind === 'gap' ? '빈칸의 단어 또는 완성된 문장을 입력하고 답안 확인을 눌러 주세요.' :
+      '영어 질문을 말하거나 직접 입력하세요. 인식된 문장을 확인한 뒤 답안을 제출해요.';
+    for (const choice of exercise.choices || []) {
+      const node = button(choice, () => { stopRecognition(); $('qbAnswer').value = choice; renderPause(); }, 'answer-choice');
+      node.lang = 'en'; node.setAttribute('aria-pressed', 'false'); $('answerChoices').append(node);
+    }
+    $('financeContext').hidden = !exercise.context;
+    if (exercise.context) {
+      const { snapshot, first, last } = exercise.context;
+      $('financePeriod').textContent = first.day + ' → ' + last.day + ' · 출처: Federal Reserve / FRED';
+      const format = value => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      $('financeRates').textContent = 'USD/KRW: ' + format(first.value) + ' → ' + format(last.value);
+      $('financeSource').href = snapshot.sourceUrl;
+    }
   }
   function renderExercise() {
     stopRecognition(); stopSpeech();
@@ -120,6 +189,7 @@
     $('answerNotice').textContent = ''; $('audioNotice').textContent = '';
     $('voiceNotice').textContent = '말하기는 선택 사항이에요. 직접 입력이나 단어 선택으로도 수업을 마칠 수 있어요.';
     renderTokens(exercise);
+    renderFormats(exercise);
     feedback = false;
     $('qbFeedback').hidden = true; $('nextQuestion').hidden = true; $('retryQuestion').hidden = true;
     $('checkQuestion').hidden = false;
@@ -140,6 +210,10 @@
     $('retryQuestion').disabled = paused;
     for (const node of $('tokenBank').children) node.disabled = paused || feedback || selected.some(token => token.id === Number(node.dataset.tokenId));
     for (const node of $('chosenTokens').children) node.disabled = paused || feedback;
+    for (const node of $('answerChoices').children) {
+      node.disabled = paused || feedback;
+      node.setAttribute('aria-pressed', String(C.normalize(node.textContent) === C.normalize($('qbAnswer').value)));
+    }
     renderVoiceControls();
   }
   function showFeedback(exercise, result) {
@@ -148,7 +222,7 @@
     $('qbFeedback').className = 'feedback ' + (result.correct ? 'success' : 'compare');
     $('feedbackTitle').textContent = result.correct ? '잘했어요. 다음 질문으로!' : '예시와 비교하며 한 번 더';
     $('feedbackMessage').textContent = result.message;
-    $('feedbackAnswer').textContent = exercise.answers[0];
+    $('feedbackAnswer').textContent = exercise.example || exercise.answers[0];
     $('feedbackTags').textContent = result.tags.map(tag => tagNames[tag] || tag).join(' · ');
     $('checkQuestion').hidden = true; $('nextQuestion').hidden = false;
     $('retryQuestion').hidden = result.correct;
@@ -173,6 +247,7 @@
     selected = []; $('chosenTokens').replaceChildren();
     for (const node of $('tokenBank').children) node.disabled = false;
     $('answerNotice').textContent = '';
+    renderPause();
   }
   $('nextQuestion').onclick = () => {
     if (!feedback || state.session.paused) return;
@@ -213,11 +288,16 @@
     $('finishLesson').hidden = Boolean(state.session.completedAt);
     $('completionNotice').textContent = state.session.completedAt ? '학습 완료가 저장되었습니다. 오늘도 한 걸음 앞으로!' : '완료를 눌러 오늘의 학습일을 기록하세요.';
     if (!persistent && state.session.completedAt) $('completionNotice').textContent = '학습을 완료했어요. 세션 전용 모드이므로 기록 내보내기로 보관해 주세요.';
+    $('rewardNotice').textContent = state.session.completedAt ?
+      (completionXP === null ? 'XP·퀘스트 현황은 수업 목록에서 확인하세요.' : completionXP ? '+' + completionXP + ' XP · 오늘의 퀘스트에도 반영했어요!' : '오늘 같은 문항의 보상은 이미 반영됐어요. 학습 기록은 유지됩니다.') : '완료하면 XP와 오늘의 퀘스트에 반영됩니다.';
+    if (!nextPersistent) $('rewardNotice').textContent += ' XP는 현재 화면에서만 유지돼요. 기록을 내보내 주세요.';
     $('summaryTitle').focus();
   }
   $('finishLesson').onclick = () => {
     let timezone = 'unknown'; try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* Optional metadata. */ }
-    C.complete(state, C.localDay(), timezone, Date.now()); save(); renderSummary(); refreshHome();
+    const day = C.localDay();
+    if (C.complete(state, day, timezone, Date.now())) completionXP = C.Next.award(nextState, state.session, day, bank, lessons);
+    save(); renderSummary(); refreshHome();
   };
   for (const lesson of lessons) {
     const card = button('', () => {
@@ -236,22 +316,27 @@
   $('cancelNewLesson').onclick = () => $('replaceLessonDialog').close();
   $('exportProgress').onclick = () => {
     accountTime(); save();
-    const url = URL.createObjectURL(new Blob([memory || JSON.stringify(state)], { type: 'application/json' }));
+    const backup = { version: 2, builder: state, next: nextState };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
     const link = document.createElement('a'); link.href = url; link.download = 'speakforward-progress-' + C.localDay() + '.json';
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   $('importProgress').onchange = async event => {
     const file = event.target.files[0]; if (!file) return;
     try {
-      if (file.size > 1000000) throw new Error('기록 파일은 1MB 이하여야 합니다.');
+      if (file.size > 5000000) throw new Error('기록 파일은 5MB 이하여야 합니다.');
       const text = await file.text();
       const parsed = JSON.parse(text);
-      if (parsed.version !== 1 || !parsed.review || !Array.isArray(parsed.completions)) throw new Error('SpeakForward 기록 파일인지 확인해 주세요.');
-      const restored = C.restore(text, bank, Date.now());
-      if (!window.confirm('선택한 기록으로 Question Builder 기록을 교체할까요? 먼저 내보내기로 현재 기록을 보관할 수 있습니다.')) return;
+      const builder = parsed.version === 2 ? parsed.builder : parsed;
+      if (builder?.version !== 1 || !builder.review || !Array.isArray(builder.completions) ||
+          (parsed.version === 2 && (parsed.next?.version !== 1 || !parsed.next.days || typeof parsed.next.days !== 'object' || Array.isArray(parsed.next.days)))) throw new Error('SpeakForward 기록 파일인지 확인해 주세요.');
+      const restored = C.restore(JSON.stringify(builder), bank, Date.now());
+      const restoredNext = parsed.version === 2 ? C.Next.restore(JSON.stringify(parsed.next), bank, lessons) : null;
+      if (!window.confirm(parsed.version === 2 ? '질문 연습과 XP·퀘스트 기록을 선택한 백업으로 교체할까요? 현재 기록을 먼저 내보낼 수 있어요.' : '질문 연습 기록을 교체할까요? 기존 형식이므로 현재 XP·퀘스트 기록은 유지됩니다.')) return;
       stopRecognition(); stopSpeech();
-      state = restored.state; save(); setView('qbHome'); refreshHome();
-      notice(restored.repaired ? '기록을 가져왔고 일부 유효하지 않은 항목을 복구했습니다.' : 'Question Builder 기록을 가져왔습니다.');
+      state = restored.state; if (restoredNext) nextState = restoredNext.state;
+      completionXP = null; save(); setView('qbHome'); refreshHome();
+      if (persistent && nextPersistent) notice(restored.repaired || restoredNext?.repaired ? '기록을 가져왔고 일부 유효하지 않은 항목을 복구했습니다.' : '학습 기록을 가져왔습니다.');
     } catch (error) { notice('가져오기 실패: ' + error.message); }
     event.target.value = '';
   };
@@ -294,7 +379,7 @@
       recognition = new R();
       recognition.lang = 'en-US'; recognition.continuous = false; recognition.interimResults = true;
       recognition.onstart = () => {
-        if (current()) $('voiceNotice').textContent = '듣고 있어요… 영어로 질문을 말해 주세요. 마이크 멈춤으로 언제든 끝낼 수 있어요.';
+        if (current()) $('voiceNotice').textContent = '듣고 있어요… 영어로 답변해 주세요. 마이크 멈춤으로 언제든 끝낼 수 있어요.';
       };
       recognition.onresult = event => {
         if (!current()) return;
@@ -325,7 +410,7 @@
         stopRecognition(heard ? '인식된 문장을 확인·수정한 뒤 답안 확인을 눌러 주세요.' : '인식된 말이 없어요. 다시 말하거나 직접 입력하세요.');
       };
       renderVoiceControls();
-      $('voiceNotice').textContent = '마이크 연결 중… 권한 요청이 나타나면 선택해 주세요. 영어로 질문을 말해 보세요.';
+      $('voiceNotice').textContent = '마이크 연결 중… 권한 요청이 나타나면 선택해 주세요. 영어로 답변해 보세요.';
       recognition.start();
     } catch {
       stopRecognition();
@@ -343,12 +428,12 @@
     if (!('speechSynthesis' in window)) { $('audioNotice').textContent = '이 브라우저는 음성 재생을 지원하지 않습니다. 텍스트로 계속 학습할 수 있어요.'; return; }
     stopSpeech();
     const exercise = bank[state.session.ids[state.session.cursor]];
-    utterance = new SpeechSynthesisUtterance(exercise.answers[0]); utterance.lang = 'en-US'; utterance.rate = 0.85;
+    utterance = new SpeechSynthesisUtterance(exercise.example || exercise.answers[0]); utterance.lang = 'en-US'; utterance.rate = 0.85;
     const voice = speechSynthesis.getVoices().find(item => /^en[-_]/i.test(item.lang));
     if (voice) utterance.voice = voice;
     utterance.onend = () => { $('audioNotice').textContent = '재생을 마쳤습니다.'; };
     utterance.onerror = () => { $('audioNotice').textContent = '음성을 재생할 수 없습니다. 아래 답안 입력으로 계속하세요.'; };
-    $('audioNotice').textContent = '예시 질문 재생 중… 먼저 듣고 따라 만들어도 좋아요.';
+    $('audioNotice').textContent = '예시 답변 재생 중… 먼저 듣고 따라 만들어도 좋아요.';
     speechSynthesis.speak(utterance);
   };
   $('qbStopAudio').onclick = () => { stopSpeech(); $('audioNotice').textContent = '재생을 멈췄습니다.'; };

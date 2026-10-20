@@ -1,0 +1,2 @@
+# Optional teaching-material refresh only. The PWA itself has no Python dependency.
+finance-datareader==0.9.202
