@@ -20,3 +20,4 @@ jobs:
       - run: npm test
       - run: python3 -m unittest discover -s tests -p 'test_*.py'
       - run: node --check app.js && node --check core.js && node --check lessons.js && node --check finance-data.js && node --check legacy.js && node --check sw.js
+      - run: node --check practice-core.js && node --check practice-content.js && node --check practice.js

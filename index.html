@@ -13,7 +13,10 @@
   <script src="./core.js" defer></script>
   <script src="./finance-data.js" defer></script>
   <script src="./lessons.js" defer></script>
+  <script src="./practice-content.js" defer></script>
+  <script src="./practice-core.js" defer></script>
   <script src="./legacy.js" defer></script>
+  <script src="./practice.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body class="text-slate-800 min-h-screen">
@@ -28,7 +31,12 @@
       <button type="button" role="tab" aria-selected="false" aria-controls="exam" class="tab bg-white px-4 py-2 text-sm font-semibold rounded-lg whitespace-nowrap border" data-target="exam">OPIc 연습</button>
       <button type="button" role="tab" aria-selected="false" aria-controls="intro" class="tab bg-white px-4 py-2 text-sm font-semibold rounded-lg whitespace-nowrap border" data-target="intro">자기소개</button>
       <button type="button" role="tab" aria-selected="false" aria-controls="record" class="tab bg-white px-4 py-2 text-sm font-semibold rounded-lg whitespace-nowrap border" data-target="record">녹음·다시 듣기</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="roleplay" class="tab" data-target="roleplay">상황 대화</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="phrases" class="tab" data-target="phrases">표현 모음</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="memory" class="tab" data-target="memory">나의 학습</button>
     </nav>
+    <p id="practiceStorageNotice" class="notice" role="status" hidden></p>
+    <div id="practiceAudioBar" class="practice-audio button-row" hidden><p id="practiceAudioNotice" class="subtle" role="status"></p><button id="practiceStopAudio" class="text-button">음성 재생 멈춤</button></div>
 
     <section id="builder" class="panel" aria-label="5분 질문 연습">
       <div id="storageNotice" class="notice" role="status" hidden></div>
@@ -37,7 +45,8 @@
           <div><span class="eyebrow">SPEAKFORWARD NEXT</span><h2 id="nextTitle">오늘도 한 단계 앞으로</h2><p>수업을 마치며 자신감을 쌓아 보세요.</p></div>
           <div class="xp-card"><div class="xp-heading"><strong id="nextLevel">레벨 1</strong><strong id="nextXP">0 XP</strong></div><progress id="nextLevelProgress" max="100" value="0" aria-label="다음 레벨까지 진행"></progress><p id="nextLevelText">0 / 100 XP</p><span id="todayXP">오늘 0 XP</span></div>
         </section>
-        <section class="quests-card" aria-labelledby="questTitle"><h3 id="questTitle">오늘의 퀘스트</h3><p class="subtle">기기 날짜 기준 · 수업의 ‘완료’를 누르면 자동 반영돼요.</p><ul id="dailyQuests">
+        <div class="practice-shortcuts"><button type="button" class="secondary practice-open" data-panel="roleplay">상황 대화 연습 →</button><button type="button" class="secondary practice-open" data-panel="phrases">저장 표현과 복습 →</button><button type="button" class="secondary practice-open" data-panel="memory">나의 학습 기록 →</button></div>
+        <section class="quests-card" aria-labelledby="questTitle"><h3 id="questTitle">질문 수업 퀘스트</h3><p class="subtle">기기 날짜 기준 · 질문 수업의 ‘완료’를 누르면 자동 반영돼요. 대화·표현 연습 XP도 위 누적 XP에 함께 표시해요.</p><ul id="dailyQuests">
           <li><span></span><strong></strong><progress value="0" max="6" aria-label="문항 6개 마무리"></progress></li>
           <li><span></span><strong></strong><progress value="0" max="1" aria-label="수업 또는 복습 완료"></progress></li>
           <li><span></span><strong></strong><progress value="0" max="3" aria-label="기한이 된 질문 3개 복습"></progress></li>
@@ -51,7 +60,13 @@
         <div class="section-heading"><div><span class="eyebrow">YOUR LEARNING PATH</span><h3>오늘 어떤 대화를 준비할까요?</h3><p class="subtle">01부터 차근차근 · 원하는 단계부터 시작해도 좋아요.</p></div><span class="subtle">각 6문항 · 약 5분</span></div>
         <div id="lessonCards" class="lesson-grid"></div>
         <section class="review-card"><div><span class="eyebrow">MAKE IT STICK</span><h3>다시 만나면, 더 자연스럽게.</h3><p id="reviewHint"></p><ul id="reviewList" class="review-list"></ul></div><button id="startReview" class="primary">복습 시작</button></section>
-        <details class="help-card"><summary>안드로이드 설치 · 기록 보관 · 사용 안내</summary><p id="installHelp">안드로이드 Chrome에서 이 페이지를 열고 ⋮ 메뉴 → ‘홈 화면에 추가’ 또는 ‘앱 설치’를 선택하세요. 메뉴 이름은 브라우저 버전에 따라 달라질 수 있어요.</p><button id="installApp" class="primary" hidden>홈 화면에 설치</button><p>처음 한 번 인터넷에 연결해 앱을 열면 텍스트 수업을 오프라인에서도 사용할 수 있어요. 영어 음성은 기기·브라우저에 따라 인터넷이 필요할 수 있습니다.</p><p>기록은 이 기기의 브라우저에만 남습니다. 브라우저 데이터 삭제·기기 변경 전에 학습 기록을 내보내세요. 음성 인식은 브라우저 제공자의 네트워크를 사용할 수 있으며, 요청한 경우에만 마이크를 켭니다.</p><div class="button-row"><button id="exportProgress" class="secondary">학습 기록 내보내기</button><label class="secondary file-button">학습 기록 가져오기<input id="importProgress" type="file" accept="application/json,.json" class="sr-only"></label></div><p class="subtle">백업에는 질문 연습과 XP·퀘스트·학습 경로를 포함해요. 이전 형식의 백업도 가져올 수 있어요. 자기소개 문장·녹음은 포함하지 않습니다. 이 앱은 등록된 예시를 기준으로 피드백하며, 공식 OPIc 성적이나 발음 점수를 평가하지 않습니다.</p></details>
+        <details class="help-card"><summary>안드로이드 설치 · 기록 보관 · 사용 안내</summary>
+          <p id="installHelp">안드로이드 Chrome에서 이 페이지를 열고 ⋮ 메뉴 → ‘홈 화면에 추가’ 또는 ‘앱 설치’를 선택하세요. 메뉴 이름은 브라우저 버전에 따라 달라질 수 있어요.</p><button id="installApp" class="primary" hidden>홈 화면에 설치</button>
+          <p>처음 한 번 인터넷에 연결해 앱을 열면 텍스트 수업과 안내형 대화·저장 표현을 오프라인에서도 사용할 수 있어요. 영어 음성은 기기·브라우저에 따라 인터넷이 필요할 수 있습니다.</p>
+          <p>기록은 이 기기의 브라우저에만 남습니다. 브라우저 데이터 삭제·기기 변경 전에 학습 기록을 내보내세요. 음성 인식은 브라우저 제공자의 네트워크를 사용할 수 있으며, 요청한 경우에만 마이크를 켭니다.</p>
+          <div class="button-row"><button id="exportProgress" class="secondary">학습 기록 내보내기</button><label class="secondary file-button">학습 기록 가져오기<input id="importProgress" type="file" accept="application/json,.json" class="sr-only"></label></div>
+          <p class="subtle">백업에는 질문·XP·퀘스트·학습 경로·대화 진행·저장한 예시 표현과 복습 일정을 포함해요. 이전 형식의 백업도 가져올 수 있어요. 입력한 답변·자기소개·녹음은 포함하지 않습니다. 이 앱은 등록된 예시를 기준으로 피드백하며 공식 OPIc 성적이나 발음 점수를 평가하지 않습니다.</p>
+        </details>
       </div>
       <section id="qbExercise" class="exercise-shell" hidden>
         <div class="exercise-top"><button id="backToLessons" class="text-button">← 수업 목록</button><span id="qbPosition"></span><button id="pauseQuestion" class="secondary">잠시 멈춤</button></div>
@@ -71,6 +86,41 @@
       </section>
       <section id="qbSummary" class="summary-card" hidden><span class="eyebrow">ONE STEP FORWARD</span><h2 id="summaryTitle" tabindex="-1">좋아요. 오늘도 한 걸음!</h2><p class="summary-score" id="summaryScore"></p><p id="summaryText"></p><p id="completionNotice" role="status"></p><p id="rewardNotice" role="status"></p><div class="button-row"><button id="finishLesson" class="primary">오늘의 학습 완료</button><button id="summaryHome" class="secondary">수업 목록</button></div></section>
       <dialog id="replaceLessonDialog"><h3>진행 중인 수업이 있어요</h3><p>새 수업을 시작하면 현재 수업의 이어하기가 교체됩니다. 이미 제출한 문항의 복습 기록은 유지돼요.</p><div class="button-row"><button id="cancelNewLesson" class="secondary">취소</button><button id="confirmNewLesson" class="primary">새 수업 시작</button></div></dialog>
+    </section>
+
+    <section id="roleplay" class="panel hidden practice-panel" aria-label="상황 대화 연습">
+      <div id="rpHome"><span class="eyebrow">GUIDED CONVERSATION</span><h2 id="roleplayTitle" tabindex="-1">내 일상에 필요한 대화를 연습해요.</h2><p>작성된 대화와 예시 표현으로 진행하는 무료 연습이에요. 새로운 문장의 의미나 발음을 자동 채점하지 않습니다.</p><button id="rpResume" class="primary" hidden>진행 중인 대화 이어가기</button><div id="scenarioCards" class="lesson-grid"></div><p class="subtle">4개 목표를 모두 연습하고 완료하면 하루 대화별 40 XP를 받아요. 입력한 답변·음성은 영구 저장하지 않습니다.</p></div>
+      <section id="rpExercise" class="practice-shell" hidden>
+        <div class="exercise-top"><button id="rpHomeButton" class="text-button">← 대화 목록</button><span id="rpPosition"></span><button id="rpPause" class="secondary">잠시 멈춤</button></div>
+        <h2 id="rpScenarioTitle"></h2><progress id="rpProgress" value="0" max="4" aria-label="대화 연습 진행"></progress>
+        <details class="practice-goals"><summary>이번 대화에서 연습할 목표</summary><ol id="rpGoals"></ol></details>
+        <p id="rpPauseNotice" class="notice" hidden>잠시 쉬는 중이에요. ‘이어서 대화’를 누르면 계속할 수 있어요.</p>
+        <div id="rpConversation" class="conversation" aria-label="대화 내용"></div>
+        <button id="rpListenTutor" class="secondary">▷ 상대방 문장 듣기</button>
+        <h3 id="rpPrompt" tabindex="-1"></h3>
+        <details class="help-card"><summary>예시 표현 보기 · 눌러서 입력</summary><div id="rpExamples" class="practice-examples"></div><button id="rpBookmark" class="text-button" aria-pressed="false">예시 표현 저장</button><p class="subtle">표현 저장은 첫 번째 예시 문장을 저장해요. 내가 입력한 문장은 저장하지 않아요.</p></details>
+        <div class="button-row"><button id="rpSpeak" class="secondary" aria-pressed="false">🎙 말로 답하기</button><button id="rpStopMic" class="secondary" disabled>마이크 멈춤</button><button id="rpType" class="text-button">조용히 · 직접 입력</button></div>
+        <p id="rpVoiceNotice" class="subtle" role="status"></p><p class="subtle">마이크는 눌렀을 때만 켜집니다. 음성 인식에는 브라우저 제공자의 네트워크가 필요할 수 있어요.</p>
+        <form id="rpForm"><label class="field-label" for="rpAnswer">나의 답변</label><textarea id="rpAnswer" rows="3" maxlength="1000" lang="en" autocomplete="off" spellcheck="false" placeholder="Write your response…"></textarea><p id="rpAnswerNotice" role="status" class="error-notice"></p><button id="rpSubmit" type="submit" class="primary">답안 비교</button></form>
+        <section id="rpFeedback" class="feedback compare" role="status" hidden><h3 id="rpFeedbackTitle"></h3><p id="rpFeedbackMessage"></p><p id="rpFeedbackExample" class="answer-example" lang="en"></p></section>
+        <div class="button-row feedback-actions"><button id="rpRetry" class="secondary" hidden>다시 말해 보기</button><button id="rpNext" class="primary" hidden>확인했어요 · 다음 대화</button></div>
+      </section>
+      <section id="rpSummary" class="summary-card" hidden><span class="eyebrow">PRACTICE COMPLETE</span><h2 id="rpSummaryTitle" tabindex="-1">한 번 더 말할 자신감이 생겼어요.</h2><p id="rpSummaryText"></p><p id="rpReward" role="status"></p><div class="button-row"><button id="rpFinish" class="primary">대화 연습 완료</button><button id="rpSummaryHome" class="secondary">대화 목록</button></div></section>
+      <dialog id="replaceDialogueDialog"><h3>진행 중인 대화가 있어요</h3><p>새 대화를 시작하면 이어하기가 교체됩니다. 저장한 예시 표현과 완료 기록은 유지됩니다.</p><div class="button-row"><button id="cancelDialogue" class="secondary">취소</button><button id="confirmDialogue" class="primary">새 대화 시작</button></div></dialog>
+    </section>
+
+    <section id="phrases" class="panel hidden practice-panel" aria-label="표현 모음과 복습">
+      <span class="eyebrow">YOUR PHRASE BOOK</span><h2>다시 말하고 싶은 표현을 모아요.</h2><p>저장 <strong id="phraseSavedCount">0</strong>개 · 지금 복습 <strong id="phraseDueCount">0</strong>개</p>
+      <div class="button-row"><label class="phrase-filter"><input id="phraseSavedOnly" type="checkbox"> 저장한 표현만 보기</label><button id="startPhraseReview" class="primary" disabled>저장한 표현 연습</button></div><p id="phraseActionNotice" role="status" class="subtle"></p>
+      <section id="phraseReview" class="practice-shell" hidden><div class="exercise-top"><strong id="phraseReviewPosition"></strong><button id="closePhraseReview" class="text-button">연습 닫기</button></div><h3 id="phraseReviewPrompt" tabindex="-1"></h3><button id="phraseReveal" class="primary">영어로 떠올린 뒤 예시 보기</button><p id="phraseReviewEnglish" class="phrase-english" lang="en" hidden></p><div id="phraseRecallButtons" class="button-row" hidden><button id="phraseAgain" class="secondary">다시 연습할래요</button><button id="phraseRemembered" class="primary">기억났어요</button></div><p id="phraseReviewNotice" role="status" class="subtle"></p><p class="subtle">직접 기억을 확인하는 연습이에요. 기억난 표현은 1·3·7일 뒤, 다시 연습할 표현은 10분 뒤 복습해요. 같은 날 같은 표현의 XP는 한 번만 반영합니다.</p></section>
+      <p id="phraseEmpty" class="notice" hidden>아직 저장한 표현이 없어요. ‘저장한 표현만 보기’를 해제하고 연습할 문장을 골라 보세요.</p><ul id="phraseList" class="phrase-grid"></ul>
+    </section>
+
+    <section id="memory" class="panel hidden practice-panel" aria-label="나의 학습 기록">
+      <span class="eyebrow">PERSONAL LEARNING MEMORY</span><h2>내가 연습한 만큼, 다음 단계가 보여요.</h2><div class="learning-stats"><div><strong id="memoryPracticeXP">0 XP</strong><span>대화·표현 누적</span></div><div><strong id="memoryPracticeToday"></strong><span>오늘의 대화·표현 연습</span></div><div><strong id="memoryDue"></strong><span>지금 복습할 항목</span></div></div>
+      <section class="review-card"><div><h3>다음으로 이렇게 연습해 보세요.</h3><p id="memoryRecommendation"></p></div><div class="button-row"><button id="memoryReviewQuestions" class="secondary">질문 복습</button><button id="memoryReviewPhrases" class="secondary">표현 복습</button><button id="memoryStartDialogue" class="primary">상황 대화</button></div></section>
+      <h3>예시와 비교했던 표현</h3><p class="subtle">질문 복습에서 남아 있는 오류 태그와 대화 중 등록된 규칙 힌트의 누적 횟수예요. 새로운 문장의 의미나 실력을 추정한 점수는 아닙니다.</p><p id="memoryEmpty">아직 비교 기록이 없어요. 수업이나 대화를 연습하면 이곳에 기록이 모입니다.</p><ul id="memoryPatterns" class="memory-patterns"></ul>
+      <div class="button-row"><button id="practiceExport" class="secondary">전체 학습 기록 내보내기</button><button id="practiceImport" class="secondary">학습 기록 가져오기</button></div><p class="subtle">질문·XP·대화 진행·저장한 예시 표현과 복습 일정을 포함해요. 입력한 답변·음성·자기소개 초안은 포함하지 않습니다.</p>
     </section>
 
     <section id="shadow" class="panel hidden grid lg:grid-cols-5 gap-5">

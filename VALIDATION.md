@@ -1,4 +1,17 @@
-# SpeakForward Next verification and finance extension — 2026-10-20
+# SpeakForward Next 2.1 guided practice validation — 2026-10-20
+
+Branch: `feat/complete-guided-practice`, based on `1fedac29`.
+Clean `npm ci --ignore-scripts` completed. **64/64 Node/jsdom tests + 3/3 Python unittest tests passed.** Existing learning/review, FDR teaching data and backup behavior remain covered. New cases cover all three scenario routes, explicit dialogue completion/retry/resume, first-attempt hint accounting, unknown-answer comparison without fabricated semantic grading, combined daily XP, bookmark recall/schedules, v3 roundtrip and v2/v1 preservation, storage failure/stale tabs, transcript minimization, speech denial/unavailable/background/cancellation and stale TTS/recognition callbacks. Recognition/TTS are mocked.
+
+The service-worker VM test reads the real index and verifies that every deferred script (including all practice modules) is served from the installed cache with the network disabled. Activation/scope/install-failure checks remain contract tests, not real browser or installed-device lifecycle validation. Cache is `speakforward-shell-v5`.
+
+Syntax and whitespace checks passed. Scoped localhost HTTP delivery verified all 15 shell resources (including sw.js), MIME types and exact bytes. GitHub CI and live HTTP resource outcomes are reported after execution.
+No actual AI API call, model-backed scoring or phoneme evaluation was made. No connected browser or Android device is available for rendered layout, real speech-provider, Fold7, TalkBack, installation or airplane-mode validation.
+See [NEXT-COMPLETION.md](NEXT-COMPLETION.md) for the exact functional boundary.
+
+---
+
+# Historical Next verification and finance extension — 2026-10-20
 
 Clean `npm ci --ignore-scripts` succeeded. **44/44 Node/jsdom tests and 3/3 Python unittest tests passed.**
 Syntax checks on app.js, core.js, lessons.js, finance-data.js, legacy.js and sw.js, and `git diff --check` passed.

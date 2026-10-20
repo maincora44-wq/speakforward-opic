@@ -19,6 +19,7 @@
   let currentModule = 'builder';
   let recognition = null;
   let voiceGeneration = 0;
+  let memorySignature = null;
   function notice(text) { $('storageNotice').textContent = text; $('storageNotice').hidden = !text; }
   try {
     const raw = localStorage.getItem(C.KEY);
@@ -63,11 +64,15 @@
   }
   function refreshHome() {
     const overview = C.Next.overview(nextState, C.localDay(), lessons);
-    $('nextXP').textContent = overview.xp + ' XP';
-    $('nextLevel').textContent = '레벨 ' + overview.level;
-    $('nextLevelProgress').value = overview.levelXP;
-    $('nextLevelText').textContent = overview.levelXP + ' / 100 XP · 다음 레벨까지 ' + (100 - overview.levelXP) + ' XP';
-    $('todayXP').textContent = '오늘 ' + overview.today.xp + ' XP';
+    const practice = window.SFPractice.stats();
+    const xp = overview.xp + practice.xp, levelXP = xp % 100;
+    $('nextXP').textContent = xp + ' XP';
+    $('nextLevel').textContent = '레벨 ' + (Math.floor(xp / 100) + 1);
+    $('nextLevelProgress').value = levelXP;
+    $('nextLevelText').textContent = levelXP + ' / 100 XP · 다음 레벨까지 ' + (100 - levelXP) + ' XP';
+    $('todayXP').textContent = '오늘 ' + (overview.today.xp + practice.today.xp) + ' XP';
+    const signature = JSON.stringify(state.review);
+    if (signature !== memorySignature) { memorySignature = signature; window.dispatchEvent(new CustomEvent('sf-builder-state', { detail: state })); }
     // Stable nodes keep keyboard focus when the home timer refreshes.
     overview.today.quests.forEach((quest, index) => {
       const row = $('dailyQuests').children[index];
@@ -299,14 +304,15 @@
     if (C.complete(state, day, timezone, Date.now())) completionXP = C.Next.award(nextState, state.session, day, bank, lessons);
     save(); renderSummary(); refreshHome();
   };
-  for (const lesson of lessons) {
-    const card = button('', () => {
+  function requestLesson(lesson) {
       if (state.session && !state.session.completedAt) {
         $('replaceLessonDialog').showModal(); $('confirmNewLesson').onclick = () => {
           $('replaceLessonDialog').close(); start(lesson.ids, 'lesson');
         };
       } else start(lesson.ids, 'lesson');
-    }, 'lesson-card');
+  }
+  for (const lesson of lessons) {
+    const card = button('', () => requestLesson(lesson), 'lesson-card');
     const number = document.createElement('span'); number.className = 'lesson-number'; number.textContent = lesson.icon;
     const title = document.createElement('strong'); title.textContent = lesson.title;
     const subtitle = document.createElement('span'); subtitle.textContent = lesson.subtitle;
@@ -315,8 +321,8 @@
   }
   $('cancelNewLesson').onclick = () => $('replaceLessonDialog').close();
   $('exportProgress').onclick = () => {
-    accountTime(); save();
-    const backup = { version: 2, builder: state, next: nextState };
+    accountTime(); save(); window.SFPractice.flush();
+    const backup = { version: 3, builder: state, next: nextState, practice: window.SFPractice.exportState() };
     const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
     const link = document.createElement('a'); link.href = url; link.download = 'speakforward-progress-' + C.localDay() + '.json';
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -327,19 +333,30 @@
       if (file.size > 5000000) throw new Error('기록 파일은 5MB 이하여야 합니다.');
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const builder = parsed.version === 2 ? parsed.builder : parsed;
+      const bundled = parsed.version === 2 || parsed.version === 3;
+      const builder = bundled ? parsed.builder : parsed;
       if (builder?.version !== 1 || !builder.review || !Array.isArray(builder.completions) ||
-          (parsed.version === 2 && (parsed.next?.version !== 1 || !parsed.next.days || typeof parsed.next.days !== 'object' || Array.isArray(parsed.next.days)))) throw new Error('SpeakForward 기록 파일인지 확인해 주세요.');
+          (bundled && (parsed.next?.version !== 1 || !parsed.next.days || typeof parsed.next.days !== 'object' || Array.isArray(parsed.next.days))) ||
+          (parsed.version === 3 && !window.SFPracticeCore.shape(parsed.practice))) throw new Error('SpeakForward 기록 파일인지 확인해 주세요.');
       const restored = C.restore(JSON.stringify(builder), bank, Date.now());
-      const restoredNext = parsed.version === 2 ? C.Next.restore(JSON.stringify(parsed.next), bank, lessons) : null;
-      if (!window.confirm(parsed.version === 2 ? '질문 연습과 XP·퀘스트 기록을 선택한 백업으로 교체할까요? 현재 기록을 먼저 내보낼 수 있어요.' : '질문 연습 기록을 교체할까요? 기존 형식이므로 현재 XP·퀘스트 기록은 유지됩니다.')) return;
+      const restoredNext = bundled ? C.Next.restore(JSON.stringify(parsed.next), bank, lessons) : null;
+      if (!window.confirm(parsed.version === 3 ? '질문·XP·대화·저장 표현 기록을 선택한 백업으로 교체할까요? 현재 기록을 먼저 내보낼 수 있어요.' : bundled ? '질문과 XP 기록을 교체할까요? 현재 대화·저장 표현 기록은 유지됩니다.' : '질문 연습 기록을 교체할까요? 기존 형식이므로 현재 XP·퀘스트와 대화·표현 기록은 유지됩니다.')) return;
       stopRecognition(); stopSpeech();
       state = restored.state; if (restoredNext) nextState = restoredNext.state;
+      const practiceRepaired = parsed.version === 3 ? window.SFPractice.importState(parsed.practice) : false;
       completionXP = null; save(); setView('qbHome'); refreshHome();
-      if (persistent && nextPersistent) notice(restored.repaired || restoredNext?.repaired ? '기록을 가져왔고 일부 유효하지 않은 항목을 복구했습니다.' : '학습 기록을 가져왔습니다.');
+      if (persistent && nextPersistent && window.SFPractice.persistent()) notice(restored.repaired || restoredNext?.repaired || practiceRepaired ? '기록을 가져왔고 일부 유효하지 않은 항목을 복구했습니다.' : '학습 기록을 가져왔습니다.');
     } catch (error) { notice('가져오기 실패: ' + error.message); }
     event.target.value = '';
   };
+  window.addEventListener('sf-practice-change', refreshHome);
+  window.addEventListener('sf-open-lesson', event => {
+    const lesson = lessons.find(item => item.id === event.detail); if (!lesson) return;
+    document.querySelector('.tab[data-target="builder"]').click(); requestLesson(lesson);
+  });
+  window.addEventListener('sf-open-review', () => { document.querySelector('.tab[data-target="builder"]').click(); $('startReview').click(); });
+  window.addEventListener('sf-export-progress', () => $('exportProgress').click());
+  window.addEventListener('sf-import-progress', () => { document.querySelector('.tab[data-target="builder"]').click(); $('importProgress').closest('details').open = true; $('importProgress').click(); });
   let utterance = null;
   function stopSpeech() { if ('speechSynthesis' in window) speechSynthesis.cancel(); utterance = null; }
   function renderVoiceControls() {
@@ -361,6 +378,7 @@
   }
   $('qbSpeak').onclick = () => {
     if (!state.session || state.session.paused || feedback || currentModule !== 'builder') return;
+    document.dispatchEvent(new Event('sf-stop-media'));
     stopSpeech(); stopRecognition();
     const R = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!R) {
@@ -424,6 +442,7 @@
     $('qbAnswer').focus();
   };
   $('qbListen').onclick = () => {
+    document.dispatchEvent(new Event('sf-stop-media'));
     stopRecognition();
     if (!('speechSynthesis' in window)) { $('audioNotice').textContent = '이 브라우저는 음성 재생을 지원하지 않습니다. 텍스트로 계속 학습할 수 있어요.'; return; }
     stopSpeech();
@@ -437,6 +456,7 @@
     speechSynthesis.speak(utterance);
   };
   $('qbStopAudio').onclick = () => { stopSpeech(); $('audioNotice').textContent = '재생을 멈췄습니다.'; };
+  document.addEventListener('sf-stop-media', () => { stopRecognition(); stopSpeech(); });
   document.querySelectorAll('.tab').forEach(node => node.addEventListener('click', () => {
     accountTime(); currentModule = node.dataset.target; stopRecognition(); stopSpeech();
     document.querySelectorAll('.tab').forEach(tab => {
