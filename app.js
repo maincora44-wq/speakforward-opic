@@ -5,9 +5,11 @@
   const $ = id => document.getElementById(id);
   const tagNames = { question_word_order: '질문 어순', auxiliary_verb: '조동사', base_verb: '동사원형',
     subject_question: '주어 의문문', tense: '시제', politeness: '정중한 요청', needs_review: '예시 비교' };
-  let memory = null;
   let persistent = true;
   let state;
+  let nextState = C.Next.fresh();
+  let nextPersistent = true;
+  let completionXP = null;
   let feedback = false;
   let selected = [];
   let tick = performance.now();
@@ -26,16 +28,45 @@
     state = state || C.freshState(); persistent = false;
     notice('이 브라우저에 저장할 수 없습니다. 현재 화면에서 학습할 수 있지만 닫으면 새 기록이 사라집니다.');
   }
+  try {
+    const restored = C.Next.restore(localStorage.getItem(C.Next.KEY), bank, lessons);
+    nextState = restored.state;
+    if (restored.repaired) notice('XP·퀘스트 기록의 유효하지 않은 항목을 복구했습니다. 기존 복습 기록은 유지됩니다.');
+  } catch { nextPersistent = false; notice('XP·퀘스트는 현재 화면에서만 유지됩니다. 기록 내보내기로 보관해 주세요.'); }
   function save() {
-    memory = JSON.stringify(state);
+    const memory = JSON.stringify(state);
     if (persistent) try { localStorage.setItem(C.KEY, memory); }
     catch { persistent = false; notice('저장 공간을 사용할 수 없어 세션 전용 모드로 전환했습니다. 기록 내보내기로 보관해 주세요.'); }
+    if (nextPersistent) try { localStorage.setItem(C.Next.KEY, JSON.stringify(nextState)); }
+    catch { nextPersistent = false; notice('XP·퀘스트를 저장할 수 없습니다. 기록 내보내기로 보관해 주세요.'); }
   }
   function button(text, action, className = 'secondary') {
     const node = document.createElement('button'); node.type = 'button';
     node.className = className; node.textContent = text; node.addEventListener('click', action); return node;
   }
   function refreshHome() {
+    const overview = C.Next.overview(nextState, C.localDay(), lessons);
+    $('nextXP').textContent = overview.xp + ' XP';
+    $('nextLevel').textContent = '레벨 ' + overview.level;
+    $('nextLevelProgress').value = overview.levelXP;
+    $('nextLevelText').textContent = overview.levelXP + ' / 100 XP · 다음 레벨까지 ' + (100 - overview.levelXP) + ' XP';
+    $('todayXP').textContent = '오늘 ' + overview.today.xp + ' XP';
+    // Stable nodes keep keyboard focus when the home timer refreshes.
+    overview.today.quests.forEach((quest, index) => {
+      const row = $('dailyQuests').children[index];
+      row.querySelector('span').textContent = quest.title + ' · ' + Math.min(quest.value, quest.goal) + '/' + quest.goal;
+      row.querySelector('strong').textContent = quest.value >= quest.goal ? '완료 · +10 XP' : '+10 XP';
+      row.querySelector('progress').value = Math.min(quest.value, quest.goal);
+      row.querySelector('progress').max = quest.goal;
+    });
+    overview.path.forEach((step, index) => {
+      const card = $('lessonCards').children[index];
+      if (!card) return;
+      card.classList.toggle('path-complete', step.complete);
+      if (step.id === overview.recommended) card.setAttribute('aria-current', 'step');
+      else card.removeAttribute('aria-current');
+      card.querySelector('small').textContent = (step.complete ? '완료 · 다시 연습' : step.id === overview.recommended ? '추천 단계 · 시작하기' : '자유롭게 시작하기') + ' · 6문항 →';
+    });
     const due = C.dueItems(state.review, bank, Date.now(), Infinity);
     $('reviewCount').textContent = due.length;
     $('startReview').disabled = !due.length;
@@ -78,7 +109,7 @@
     if (!ids.length) return;
     stopRecognition(); stopSpeech();
     state.session = C.newSession(ids, mode, Date.now(), crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random());
-    tick = performance.now(); save(); renderExercise();
+    completionXP = null; tick = performance.now(); save(); renderExercise();
   }
   function renderTokens(exercise) {
     selected = []; $('tokenBank').replaceChildren(); $('chosenTokens').replaceChildren();
@@ -213,11 +244,16 @@
     $('finishLesson').hidden = Boolean(state.session.completedAt);
     $('completionNotice').textContent = state.session.completedAt ? '학습 완료가 저장되었습니다. 오늘도 한 걸음 앞으로!' : '완료를 눌러 오늘의 학습일을 기록하세요.';
     if (!persistent && state.session.completedAt) $('completionNotice').textContent = '학습을 완료했어요. 세션 전용 모드이므로 기록 내보내기로 보관해 주세요.';
+    $('rewardNotice').textContent = state.session.completedAt ?
+      (completionXP === null ? 'XP·퀘스트 현황은 수업 목록에서 확인하세요.' : completionXP ? '+' + completionXP + ' XP · 오늘의 퀘스트에도 반영했어요!' : '오늘 같은 문항의 보상은 이미 반영됐어요. 학습 기록은 유지됩니다.') : '완료하면 XP와 오늘의 퀘스트에 반영됩니다.';
+    if (!nextPersistent) $('rewardNotice').textContent += ' XP는 현재 화면에서만 유지돼요. 기록을 내보내 주세요.';
     $('summaryTitle').focus();
   }
   $('finishLesson').onclick = () => {
     let timezone = 'unknown'; try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* Optional metadata. */ }
-    C.complete(state, C.localDay(), timezone, Date.now()); save(); renderSummary(); refreshHome();
+    const day = C.localDay();
+    if (C.complete(state, day, timezone, Date.now())) completionXP = C.Next.award(nextState, state.session, day, bank, lessons);
+    save(); renderSummary(); refreshHome();
   };
   for (const lesson of lessons) {
     const card = button('', () => {
@@ -236,22 +272,27 @@
   $('cancelNewLesson').onclick = () => $('replaceLessonDialog').close();
   $('exportProgress').onclick = () => {
     accountTime(); save();
-    const url = URL.createObjectURL(new Blob([memory || JSON.stringify(state)], { type: 'application/json' }));
+    const backup = { version: 2, builder: state, next: nextState };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
     const link = document.createElement('a'); link.href = url; link.download = 'speakforward-progress-' + C.localDay() + '.json';
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   $('importProgress').onchange = async event => {
     const file = event.target.files[0]; if (!file) return;
     try {
-      if (file.size > 1000000) throw new Error('기록 파일은 1MB 이하여야 합니다.');
+      if (file.size > 5000000) throw new Error('기록 파일은 5MB 이하여야 합니다.');
       const text = await file.text();
       const parsed = JSON.parse(text);
-      if (parsed.version !== 1 || !parsed.review || !Array.isArray(parsed.completions)) throw new Error('SpeakForward 기록 파일인지 확인해 주세요.');
-      const restored = C.restore(text, bank, Date.now());
-      if (!window.confirm('선택한 기록으로 Question Builder 기록을 교체할까요? 먼저 내보내기로 현재 기록을 보관할 수 있습니다.')) return;
+      const builder = parsed.version === 2 ? parsed.builder : parsed;
+      if (builder?.version !== 1 || !builder.review || !Array.isArray(builder.completions) ||
+          (parsed.version === 2 && (parsed.next?.version !== 1 || !parsed.next.days || typeof parsed.next.days !== 'object' || Array.isArray(parsed.next.days)))) throw new Error('SpeakForward 기록 파일인지 확인해 주세요.');
+      const restored = C.restore(JSON.stringify(builder), bank, Date.now());
+      const restoredNext = parsed.version === 2 ? C.Next.restore(JSON.stringify(parsed.next), bank, lessons) : null;
+      if (!window.confirm(parsed.version === 2 ? '질문 연습과 XP·퀘스트 기록을 선택한 백업으로 교체할까요? 현재 기록을 먼저 내보낼 수 있어요.' : '질문 연습 기록을 교체할까요? 기존 형식이므로 현재 XP·퀘스트 기록은 유지됩니다.')) return;
       stopRecognition(); stopSpeech();
-      state = restored.state; save(); setView('qbHome'); refreshHome();
-      notice(restored.repaired ? '기록을 가져왔고 일부 유효하지 않은 항목을 복구했습니다.' : 'Question Builder 기록을 가져왔습니다.');
+      state = restored.state; if (restoredNext) nextState = restoredNext.state;
+      completionXP = null; save(); setView('qbHome'); refreshHome();
+      if (persistent && nextPersistent) notice(restored.repaired || restoredNext?.repaired ? '기록을 가져왔고 일부 유효하지 않은 항목을 복구했습니다.' : '학습 기록을 가져왔습니다.');
     } catch (error) { notice('가져오기 실패: ' + error.message); }
     event.target.value = '';
   };

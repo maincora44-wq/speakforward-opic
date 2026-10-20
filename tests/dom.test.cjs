@@ -12,6 +12,7 @@ function boot(options={}) {
  const w=dom.window;
  if(options.recognition)w.SpeechRecognition=options.recognition;
  if(options.saved)w.localStorage.setItem('speakForward.questionBuilder.v1',options.saved);
+ if(options.nextSaved)w.localStorage.setItem('speakForward.next.v1',options.nextSaved);
  if(options.blockStorage)Object.defineProperty(w,'localStorage',{get(){throw new w.DOMException('Blocked','SecurityError');}});
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  for(const file of ['core.js','lessons.js','legacy.js','app.js'])w.eval(fs.readFileSync(path.join(root,file),'utf8'));
@@ -35,6 +36,69 @@ test('full lesson: blank feedback, incorrect retry, next, six answers and explic
  assert.equal(JSON.stringify(stored).includes('operating expenses'),false);
  assert.equal($('completedDays').textContent,'1');assert.deepEqual(env.errors,[]);
  }finally{env.dom.window.close();}
+});
+
+function finishFirstLesson(env) {
+ const {$, w} = env;
+ $('lessonCards').children[0].click();
+ if ($('replaceLessonDialog').open) $('confirmNewLesson').click();
+ for (const id of w.SFLessons.lessons[0].ids) { submit(env, w.SFLessons.bank[id].answers[0]); $('nextQuestion').click(); }
+ $('finishLesson').click();
+}
+test('Next dashboard updates path and quests only on completion and survives reload', () => {
+ let env = boot(); let saved, nextSaved;
+ try {
+  finishFirstLesson(env);
+  assert.equal(env.$('nextXP').textContent, '70 XP');
+  assert.match(env.$('rewardNotice').textContent, /\+70 XP/);
+  assert.equal(env.$('lessonCards').children[1].getAttribute('aria-current'), 'step');
+  assert.match(env.$('dailyQuests').children[0].textContent, /6\/6/);
+  saved = env.w.localStorage.getItem(env.w.SFCore.KEY); nextSaved = env.w.localStorage.getItem(env.w.SFCore.Next.KEY);
+  assert.deepEqual(env.errors, []);
+ } finally { env.dom.window.close(); }
+ env = boot({saved, nextSaved});
+ try { finishFirstLesson(env); assert.equal(env.$('nextXP').textContent, '70 XP'); assert.match(env.$('rewardNotice').textContent, /이미/); }
+ finally { env.dom.window.close(); }
+});
+test('v2 export/import roundtrip restores both ledgers; v1 import preserves current Next progress', async () => {
+ const env = boot();
+ try {
+  const {$, w} = env; finishFirstLesson(env);
+  let exported;
+  w.URL.createObjectURL = blob => { exported = blob; return 'blob:backup'; };
+  w.URL.revokeObjectURL = () => {};
+  w.HTMLAnchorElement.prototype.click = function () {};
+  $('exportProgress').click();
+  const text = await new Promise(resolve => { const reader = new w.FileReader(); reader.onload = () => resolve(reader.result); reader.readAsText(exported); });
+  const backup = JSON.parse(text); assert.equal(backup.version, 2);
+  assert.equal(backup.builder.version, 1); assert.equal(backup.next.version, 1);
+  w.confirm = () => true;
+  const load = async data => { const value = JSON.stringify(data); await $('importProgress').onchange({target:{files:[{size:value.length,text:async()=>value}],value:'test'}}); };
+  await load({version:2,builder:w.SFCore.freshState(),next:w.SFCore.Next.fresh()});
+  assert.equal($('nextXP').textContent, '0 XP');
+  await load(backup); assert.equal($('nextXP').textContent, '70 XP');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem(w.SFCore.KEY)).review, backup.builder.review);
+  await load(w.SFCore.freshState()); assert.equal($('nextXP').textContent, '70 XP');
+  const before = w.localStorage.getItem(w.SFCore.KEY);
+  await load({version:2,builder:backup.builder,next:{version:9,days:{}}});
+  assert.match($('storageNotice').textContent, /실패/); assert.equal(w.localStorage.getItem(w.SFCore.KEY), before);
+  w.confirm = () => false; await load({version:2,builder:w.SFCore.freshState(),next:w.SFCore.Next.fresh()});
+  assert.equal($('nextXP').textContent, '70 XP'); assert.deepEqual(env.errors, []);
+ } finally { env.dom.window.close(); }
+});
+test('Next write failure reports unsaved rewards and preserves legacy storage', () => {
+ const env = boot();
+ try {
+  const {$, w} = env;
+  w.localStorage.setItem('sf_intro', 'keep me');
+  const original = w.Storage.prototype.setItem;
+  w.Storage.prototype.setItem = function(key, value) { if (key === w.SFCore.Next.KEY) throw new Error('QuotaExceeded'); return original.call(this,key,value); };
+  finishFirstLesson(env);
+  assert.equal($('nextXP').textContent, '70 XP'); assert.match($('storageNotice').textContent, /저장할 수 없/);
+  assert.match($('rewardNotice').textContent, /현재 화면/); assert.equal(w.localStorage.getItem('sf_intro'), 'keep me');
+  assert.equal(JSON.parse(w.localStorage.getItem(w.SFCore.KEY)).completions.length, 1);
+  assert.deepEqual(env.errors, []);
+ } finally { env.dom.window.close(); }
 });
 test('reload resumes submitted feedback without double scheduling; pause blocks submission',()=>{
  let env=boot();let saved;try{env.$('lessonCards').children[0].click();submit(env,'some response');saved=env.w.localStorage.getItem(env.w.SFCore.KEY);}finally{env.dom.window.close();}

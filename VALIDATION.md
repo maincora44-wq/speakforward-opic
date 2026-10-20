@@ -1,3 +1,13 @@
+# SpeakForward Next Phase 1 validation — 2026-10-20
+
+Branch: `feat/speakforward-next-foundation`, based on `3df56fa`.
+Executed `npm test`: **35/35 passed**, including the existing 29 tests and six Next-specific tests for rewards, reload/date changes, progress repair, dashboard/path integration, backup compatibility and storage failure.
+Executed `node --check` on core.js, app.js, legacy.js and sw.js, and `git diff --check`.
+No physical Android or rendered browser validation was performed. No merge or production deployment is part of this branch. Current cache version: `speakforward-shell-v3`.
+Full implementation scope and reward/data rules: [NEXT-PHASE1.md](NEXT-PHASE1.md).
+
+---
+
 # SpeakForward Android PWA validation
 
 Date: 2026-10-18 KST.

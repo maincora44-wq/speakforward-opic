@@ -116,6 +116,57 @@
     } else if (session) repaired = true;
     return { state, repaired };
   }
+  // Next progress is independent of the v1 review schedule. XP is derived from
+  // unique daily facts rather than a mutable counter, including after import.
+  const NEXT_KEY = 'speakForward.next.v1';
+  function nextFresh() { return { version: 1, days: {} }; }
+  function nextRestore(raw, bank, lessons) {
+    if (!raw) return { state: nextFresh(), repaired: false };
+    try {
+      const value = JSON.parse(raw);
+      if (value?.version !== 1 || !value.days || typeof value.days !== 'object' || Array.isArray(value.days)) throw new Error();
+      const state = nextFresh();
+      const lessonIds = new Set(lessons.map(item => item.id));
+      for (const [day, item] of Object.entries(value.days)) {
+        if (!Number.isFinite(dayNumber(day)) || !item || typeof item !== 'object') continue;
+        const pick = (key, valid) => [...new Set(Array.isArray(item[key]) ? item[key].filter(id => typeof id === 'string' && valid(id)) : [])];
+        const answers = pick('answers', id => Object.hasOwn(bank, id));
+        state.days[day] = { answers, reviews: pick('reviews', id => answers.includes(id)),
+          lessons: pick('lessons', id => lessonIds.has(id) && lessons.find(l => l.id === id).ids.every(q => answers.includes(q))) };
+      }
+      return { state, repaired: JSON.stringify(state) !== JSON.stringify(value) };
+    } catch { return { state: nextFresh(), repaired: true }; }
+  }
+  function dailyProgress(next, day) {
+    const item = next.days[day] || { answers: [], reviews: [], lessons: [] };
+    const quests = [
+      { title: '질문 6개 마무리', value: item.answers.length, goal: 6 },
+      { title: '수업 또는 복습 완료', value: item.lessons.length + Number(item.reviews.length > 0), goal: 1 },
+      { title: '기한이 된 질문 3개 복습', value: item.reviews.length, goal: 3 }
+    ];
+    const xp = item.answers.length * 5 + item.lessons.length * 20 + (item.reviews.length ? 10 : 0) + quests.filter(q => q.value >= q.goal).length * 10;
+    return { quests, xp };
+  }
+  function nextAward(next, session, day, bank, lessons) {
+    if (!Number.isFinite(dayNumber(day)) || !session?.completedAt || !session.ids?.length ||
+        session.ids.some(id => !Object.hasOwn(bank, id) || !session.results?.[id])) return 0;
+    const lesson = lessons.find(item => item.ids.length === session.ids.length && item.ids.every(id => session.ids.includes(id)));
+    if (session.mode !== 'review' && !(session.mode === 'lesson' && lesson)) return 0;
+    const before = dailyProgress(next, day).xp;
+    const item = next.days[day] ||= { answers: [], reviews: [], lessons: [] };
+    item.answers = [...new Set([...item.answers, ...session.ids])];
+    if (session.mode === 'review') item.reviews = [...new Set([...item.reviews, ...session.ids])];
+    else item.lessons = [...new Set([...item.lessons, lesson.id])];
+    return dailyProgress(next, day).xp - before;
+  }
+  function nextOverview(next, day, lessons) {
+    const xp = Object.keys(next.days).reduce((sum, key) => sum + dailyProgress(next, key).xp, 0);
+    const completed = new Set(Object.values(next.days).flatMap(item => item.lessons));
+    return { xp, level: Math.floor(xp / 100) + 1, levelXP: xp % 100,
+      today: dailyProgress(next, day), path: lessons.map(lesson => ({ id: lesson.id, complete: completed.has(lesson.id) })),
+      recommended: lessons.find(lesson => !completed.has(lesson.id))?.id || lessons[0]?.id };
+  }
   return { KEY, normalize, evaluate, localDay, dayNumber, freshState, schedule, dueItems, streak,
-    complete, newSession, record, restore };
+    complete, newSession, record, restore,
+    Next: { KEY: NEXT_KEY, fresh: nextFresh, restore: nextRestore, award: nextAward, overview: nextOverview } };
 });
