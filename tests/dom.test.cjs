@@ -15,13 +15,79 @@ function boot(options={}) {
  if(options.nextSaved)w.localStorage.setItem('speakForward.next.v1',options.nextSaved);
  if(options.blockStorage)Object.defineProperty(w,'localStorage',{get(){throw new w.DOMException('Blocked','SecurityError');}});
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
- for(const file of ['core.js','lessons.js','legacy.js','app.js'])w.eval(fs.readFileSync(path.join(root,file),'utf8'));
+ for(const file of ['core.js','finance-data.js','lessons.js','legacy.js','app.js'])w.eval(fs.readFileSync(path.join(root,file),'utf8'));
  return {dom,w,$:id=>w.document.getElementById(id),errors};
 }
 function submit(env,text){env.$('qbAnswer').value=text;env.$('qbForm').dispatchEvent(new env.w.Event('submit',{bubbles:true,cancelable:true}));}
+test('another tab changing progress cannot be overwritten by a stale lesson save', () => {
+ const env = boot(); try {
+  const {$, w} = env; $('lessonCards').children[0].click();
+  const external = w.SFCore.freshState(); external.completions.push({day:'2026-10-19',timezone:'Asia/Seoul',sessionId:'other-tab'});
+  const raw = JSON.stringify(external); w.localStorage.setItem(w.SFCore.KEY, raw);
+  submit(env, w.SFLessons.bank[w.SFLessons.lessons[0].ids[0]].answers[0]);
+  assert.equal(w.localStorage.getItem(w.SFCore.KEY), raw);
+  assert.match($('storageNotice').textContent, /다른 창/); assert.equal($('qbFeedback').hidden, false);
+  assert.deepEqual(env.errors, []);
+ } finally { env.dom.window.close(); }
+});
+test('storage events stop stale XP saves while unrelated legacy keys stay usable', () => {
+ const env = boot(); try {
+  const {$, w} = env; $('lessonCards').children[0].click();
+  w.dispatchEvent(new w.StorageEvent('storage', {key:'sf_intro',newValue:'draft',storageArea:w.localStorage}));
+  assert.equal($('storageNotice').hidden, true);
+  const external = w.SFCore.Next.fresh(); const day = w.SFCore.localDay();
+  external.days[day] = {answers:[w.SFLessons.lessons[0].ids[0]],reviews:[],lessons:[]};
+  const raw = JSON.stringify(external); w.localStorage.setItem(w.SFCore.Next.KEY, raw);
+  w.dispatchEvent(new w.StorageEvent('storage', {key:w.SFCore.Next.KEY,newValue:raw,storageArea:w.localStorage}));
+  finishFirstLesson(env);
+  assert.equal(w.localStorage.getItem(w.SFCore.Next.KEY), raw); assert.match($('storageNotice').textContent, /다른 창/);
+  assert.match($('rewardNotice').textContent, /현재 화면/); assert.deepEqual(env.errors, []);
+ } finally { env.dom.window.close(); }
+});
+test('finance choice and gap lesson supports pause, retry, full completion and XP', () => {
+ const env = boot(); try {
+  const {$, w} = env; const lesson = w.SFLessons.lessons.at(-1);
+  $('lessonCards').lastElementChild.click();
+  assert.equal($('financeContext').hidden, false); assert.match($('financePeriod').textContent, /2025-09-02/);
+  assert.match($('financeRates').textContent, /1,394\.76.*1,385\.28/);
+  assert.equal($('financeSource').href, 'https://fred.stlouisfed.org/series/DEXKOUS');
+  const choose = answer => [...$('answerChoices').children].find(node => node.textContent === answer);
+  choose(w.SFLessons.bank[lesson.ids[0]].answers[0]).click();
+  assert.equal($('qbFeedback').hidden, true); // Selection must never auto-submit.
+  $('pauseQuestion').click(); assert.ok([...$('answerChoices').children].every(node => node.disabled));
+  submit(env, 'The USD/KRW rate fell over the period.'); assert.equal($('qbFeedback').hidden, true);
+  $('pauseQuestion').click(); submit(env, $('qbAnswer').value); $('nextQuestion').click();
+  assert.equal($('gapSentence').hidden, false); assert.match($('gapSentence').textContent, /___.*0\.68/);
+  assert.equal($('answerChoices').hidden, true); submit(env,'rose'); $('retryQuestion').click(); submit(env,'fell');
+  assert.match($('feedbackAnswer').textContent, /The USD\/KRW rate fell/); $('nextQuestion').click();
+  for (const id of lesson.ids.slice(2)) { submit(env,w.SFLessons.bank[id].answers[0]); $('nextQuestion').click(); }
+  assert.equal($('summaryScore').textContent, '5 / 6'); $('finishLesson').click();
+  assert.equal($('nextXP').textContent, '70 XP');
+  assert.equal(JSON.parse(w.localStorage.getItem(w.SFCore.KEY)).review[lesson.ids[1]].stage,0);
+  assert.deepEqual(env.errors, []);
+ } finally { env.dom.window.close(); }
+});
+test('finance choices can be typed, survive resume and participate in due review without network', () => {
+ const C = require('../core.js'); const {bank, lessons} = require('../lessons.js');
+ const lesson = lessons.at(-1); const saved = C.freshState();
+ saved.review[lesson.ids[0]] = C.schedule(null,false,[],Date.now()-700000);
+ let env = boot({saved:JSON.stringify(saved)}); let raw;
+ try {
+  env.$('startReview').click(); assert.equal(env.$('answerChoices').hidden, false);
+  submit(env,bank[lesson.ids[0]].answers[0]); raw = env.w.localStorage.getItem(C.KEY);
+ } finally { env.dom.window.close(); }
+ env = boot({saved:raw}); try {
+  env.$('resumeLesson').click(); assert.equal(env.$('qbFeedback').hidden,false);
+  assert.ok([...env.$('answerChoices').children].every(node => node.disabled));
+  env.$('nextQuestion').click(); env.$('finishLesson').click();
+  assert.equal(env.$('nextXP').textContent,'25 XP'); // 5 answer + 10 review + 10 completion quest.
+  assert.equal(JSON.parse(env.w.localStorage.getItem(C.KEY)).review[lesson.ids[0]].stage,1);
+  assert.deepEqual(env.errors, []);
+ } finally { env.dom.window.close(); }
+});
 test('full lesson: blank feedback, incorrect retry, next, six answers and explicit completion',()=>{
  const env=boot();try{
- const {$,w}=env;assert.equal($('lessonCards').children.length,4);
+ const {$,w}=env;assert.equal($('lessonCards').children.length,5);
  $('lessonCards').children[0].click();assert.equal($('qbExercise').hidden,false);
  submit(env,' ');assert.match($('answerNotice').textContent,/입력/);assert.equal($('qbFeedback').hidden,true);
  submit(env,'Why did operating expenses increased in March?');assert.equal($('qbFeedback').hidden,false);assert.match($('feedbackTags').textContent,/동사원형/);

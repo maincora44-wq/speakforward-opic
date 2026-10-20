@@ -18,4 +18,5 @@ jobs:
           package-manager-cache: false
       - run: npm ci --ignore-scripts
       - run: npm test
-      - run: node --check app.js && node --check legacy.js && node --check sw.js
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - run: node --check app.js && node --check core.js && node --check lessons.js && node --check finance-data.js && node --check legacy.js && node --check sw.js

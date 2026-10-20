@@ -1,8 +1,9 @@
 (function (root, factory) {
-  const api = factory();
+  const snapshot = typeof module === 'object' && module.exports ? require('./finance-data.js') : root.SFFinanceData;
+  const api = factory(snapshot);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.SFLessons = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (snapshot) {
   'use strict';
   const lessons = [
     { id: 'questions', title: '질문의 순서', subtitle: 'Do · Does · Did · 의문사', icon: '01', skill: '질문 어순',
@@ -60,5 +61,45 @@
     });
     delete lesson.rows;
   }
+  // Freeze the observed period in versioned teaching material. Updating market
+  // data must create new exercise IDs, never silently change old review answers.
+  const observations = snapshot.observations.filter(point => point.value !== null);
+  const first = observations[0], last = observations.at(-1);
+  const change = ((last.value / first.value) - 1) * 100;
+  const movement = change > 0 ? 'rose' : change < 0 ? 'fell' : 'was unchanged';
+  const reverse = change > 0 ? 'fell' : 'rose';
+  const percent = Math.abs(change).toFixed(2);
+  const trend = 'The USD/KRW rate ' + movement + ' over the period.';
+  const pastSentence = 'The USD/KRW rate ' + movement + ' by about ' + percent + ' percent.';
+  const wonDirection = change > 0 ? 'weakened' : 'strengthened';
+  const strength = 'The won ' + wonDirection + ' against the dollar over the period.';
+  const financeLesson = { id: 'finance-fx-202509-v1', icon: '05', title: '환율을 영어로 설명하기',
+    subtitle: '과거 실제 데이터 · 선택형 · 빈칸형', skill: '금융 영어', ids: [] };
+  const context = { snapshot, first, last, changePercent: change };
+  const exercises = [
+    { key: 'trend', kind: 'choice', prompt: '자료의 첫날과 마지막 날을 비교한 문장을 고르세요.', answers: [trend],
+      choices: ['The USD/KRW rate ' + reverse + ' over the period.', trend, 'The USD/KRW rate was unchanged over the period.'],
+      explanation: '기간 양끝의 환율을 비교합니다. 이 기간의 모든 날이 같은 방향으로 움직였다는 뜻은 아니에요.' },
+    { key: 'movement', kind: 'gap', prompt: '빈칸에 들어갈 과거형 동사를 쓰세요.', answers: [movement, pastSentence], example: pastSentence,
+      gap: 'The USD/KRW rate ___ by about ' + percent + ' percent.',
+      explanation: 'fall의 과거형은 fell, rise의 과거형은 rose입니다. by 뒤에 변화율을 붙여요.' },
+    { key: 'won', kind: 'choice', prompt: '1달러를 사는 데 필요한 원화가 줄었습니다. 알맞은 설명을 고르세요.', answers: [strength],
+      choices: ['The won weakened against the dollar over the period.', 'The won was unchanged against the dollar over the period.', strength],
+      explanation: 'USD/KRW가 하락하면 1달러당 필요한 원화가 줄어, 이 두 시점 사이 원화는 달러 대비 강해진 것입니다. 환율 숫자의 방향과 통화 가치의 방향을 구분해요.' },
+    { key: 'did', kind: 'gap', prompt: '과거의 환율 변화를 묻는 질문을 완성하세요.', answers: ['did', 'How did the exchange rate change over the period?'],
+      example: 'How did the exchange rate change over the period?', gap: 'How ___ the exchange rate change over the period?',
+      explanation: '과거를 묻는 질문은 How + did + 주어 + 동사원형 순서예요.' },
+    { key: 'date', kind: 'type', prompt: '이 환율의 관측일이 언제인지 물어보세요.', answers: ['What is the observation date?', 'Which date does this rate refer to?'],
+      explanation: 'observation date는 데이터가 관측된 날짜예요. 과거 자료를 오늘의 시세처럼 말하지 않도록 기준일을 함께 확인해요.' },
+    { key: 'source', kind: 'order', prompt: '이 환율의 출처를 확인해 달라고 정중하게 요청하세요.', answers: ['Could you confirm the source of this exchange rate?'],
+      explanation: 'Could you confirm ...?으로 데이터 출처 확인을 정중하게 요청해요.' }
+  ];
+  for (const exercise of exercises) {
+    const id = 'finance-fx-202509-' + exercise.key + '-v1';
+    financeLesson.ids.push(id);
+    bank[id] = { ...exercise, id, version: 1, lessonId: financeLesson.id, skill: financeLesson.skill,
+      context, errors: [], provenance: 'Original SpeakForward content' };
+  }
+  lessons.push(financeLesson);
   return { lessons, bank };
 });

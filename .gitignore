@@ -6,3 +6,5 @@ work/
 *.log
 playwright-report/
 test-results/
+__pycache__/
+.venv-finance/

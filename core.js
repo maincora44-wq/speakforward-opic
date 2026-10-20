@@ -12,7 +12,7 @@
   }
   function evaluate(exercise, answer) {
     const value = normalize(answer);
-    if (!value) return { empty: true, correct: false, tags: [], message: '먼저 질문을 입력해 주세요.' };
+    if (!value) return { empty: true, correct: false, tags: [], message: '먼저 답변을 입력하거나 선택해 주세요.' };
     if (exercise.answers.some(item => normalize(item) === value)) {
       return { empty: false, correct: true, tags: [], message: exercise.explanation };
     }
@@ -140,7 +140,7 @@
   function dailyProgress(next, day) {
     const item = next.days[day] || { answers: [], reviews: [], lessons: [] };
     const quests = [
-      { title: '질문 6개 마무리', value: item.answers.length, goal: 6 },
+      { title: '문항 6개 마무리', value: item.answers.length, goal: 6 },
       { title: '수업 또는 복습 완료', value: item.lessons.length + Number(item.reviews.length > 0), goal: 1 },
       { title: '기한이 된 질문 3개 복습', value: item.reviews.length, goal: 3 }
     ];

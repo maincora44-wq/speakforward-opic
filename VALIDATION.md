@@ -1,4 +1,20 @@
-# SpeakForward Next Phase 1 validation — 2026-10-20
+# SpeakForward Next verification and finance extension — 2026-10-20
+
+Clean `npm ci --ignore-scripts` succeeded. **44/44 Node/jsdom tests and 3/3 Python unittest tests passed.**
+Syntax checks on app.js, core.js, lessons.js, finance-data.js, legacy.js and sw.js, and `git diff --check` passed.
+
+Added meaningful checks for stale-tab saves (reproduced failure before the fix), storage events, finance choice/gap completion, pause/retry, typed choices, reload and due review. Service-worker tests execute install/activate/fetch/message handlers in a VM with mock Cache/Fetch APIs, including all deferred scripts offline, scoped requests, initial install failure and explicit update activation. These are not browser lifecycle tests.
+
+FinanceDataReader 0.9.202 was actually installed in an isolated developer environment. `scripts/fetch-finance-lesson.py` successfully acquired FRED DEXKOUS for 2025-09-02 through 2025-09-05 and cross-checked nonmissing observations against the raw source CSV. See [FINANCE-DATA.md](FINANCE-DATA.md). Standard-library tests verify missingness preservation and rejection of bad values/dates; routine CI does not call the external source.
+
+Local HTTP validation at `http://127.0.0.1:4181/speakforward-opic/` verified HTTP 200, expected MIME types and byte equality with local sources for the app shell. The reusable `scripts/verify-shell.cjs` also checks sw.js on deployed URLs.
+
+Current service-worker cache: `speakforward-shell-v4`. The optional Python dependencies are not required to run the PWA.
+No rendered browser, connected physical Android, live speech service or installed airplane-mode session was tested. HTTP resource validation and GitHub workflow outcomes are reported after execution.
+
+---
+
+# Initial SpeakForward Next Phase 1 validation — 2026-10-20
 
 Branch: `feat/speakforward-next-foundation`, based on `3df56fa`.
 Executed `npm test`: **35/35 passed**, including the existing 29 tests and six Next-specific tests for rewards, reload/date changes, progress repair, dashboard/path integration, backup compatibility and storage failure.

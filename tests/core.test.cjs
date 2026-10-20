@@ -7,8 +7,9 @@ const minute = 60000;
 const day = 86400000;
 const question = bank['questions-variance-v1'];
 test('original bank: 4 complete lessons, 24 unique versioned exercises', () => {
-  assert.equal(lessons.length, 4); assert.equal(Object.keys(bank).length, 24);
-  for (const lesson of lessons) { assert.equal(lesson.ids.length, 6); for (const id of lesson.ids) {
+  const original = lessons.filter(lesson => ['questions','requests','audit','meetings'].includes(lesson.id));
+  assert.equal(original.length, 4); assert.equal(original.flatMap(lesson => lesson.ids).length, 24);
+  for (const lesson of original) { assert.equal(lesson.ids.length, 6); for (const id of lesson.ids) {
     assert.equal(bank[id].provenance, 'Original SpeakForward content');
     assert.ok(bank[id].answers.length); assert.ok(bank[id].explanation);
   } }
