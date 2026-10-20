@@ -10,6 +10,18 @@
     return String(text).normalize('NFKC').replace(/[‘’]/g, "'").toLowerCase()
       .trim().replace(/[.!?]+$/g, '').trim().replace(/\s+/g, ' ');
   }
+  function speechTranscript(prefix, results) {
+    // SpeechRecognitionEvent.results is the full current result list, not a
+    // stream of new words. Replayed finals and revised/interim slots must
+    // replace their previous text. Rebuild the snapshot without lexical dedup:
+    // deliberate speech such as "very very" or two equal phrases is valid.
+    const parts = [];
+    for (let index = 0; index < (results?.length || 0); index++) {
+      const transcript = results[index]?.[0]?.transcript;
+      if (typeof transcript === 'string' && transcript.trim()) parts.push(transcript.trim());
+    }
+    return { text: [String(prefix ?? '').trim(), ...parts].filter(Boolean).join(' '), heard: parts.length > 0 };
+  }
   function evaluate(exercise, answer) {
     const value = normalize(answer);
     if (!value) return { empty: true, correct: false, tags: [], message: '먼저 답변을 입력하거나 선택해 주세요.' };
@@ -166,7 +178,7 @@
       today: dailyProgress(next, day), path: lessons.map(lesson => ({ id: lesson.id, complete: completed.has(lesson.id) })),
       recommended: lessons.find(lesson => !completed.has(lesson.id))?.id || lessons[0]?.id };
   }
-  return { KEY, normalize, evaluate, localDay, dayNumber, freshState, schedule, dueItems, streak,
+  return { KEY, normalize, speechTranscript, evaluate, localDay, dayNumber, freshState, schedule, dueItems, streak,
     complete, newSession, record, restore,
     Next: { KEY: NEXT_KEY, fresh: nextFresh, restore: nextRestore, award: nextAward, overview: nextOverview } };
 });
