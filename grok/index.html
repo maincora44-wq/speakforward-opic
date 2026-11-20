@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142721">
+  <meta name="description" content="A 30-day English speaking studio with OPIc, workplace practice, and prompts for Grok.">
+  <title>Speaking Studio · English Practice</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="sessions.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to practice</a>
+  <header class="masthead">
+    <div class="shell masthead-inner">
+      <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">▮▰▮</span> Speaking Studio</a>
+      <nav aria-label="Main">
+        <a href="#practice">Practice</a>
+        <a href="#progress">Progress</a>
+        <a href="#grok-bot">Grok bot</a>
+      </nav>
+    </div>
+  </header>
+  <main class="shell" id="main">
+    <section class="hero" aria-labelledby="studio-title">
+      <div>
+        <p class="kicker">30-day English program</p>
+        <h1 id="studio-title">Speak with<br>more confidence.</h1>
+        <p>Practice everyday conversations, OPIc answers, and workplace English. Continue each session with Grok for a follow-up and feedback.</p>
+      </div>
+      <aside class="hero-progress" aria-labelledby="hero-progress-label">
+        <p id="hero-progress-label">Your practice</p>
+        <div><strong id="completed-count">0</strong><span> / 30 sessions</span></div>
+        <progress id="overall-progress" aria-label="Sessions completed" value="0" max="30"></progress>
+        <a href="#progress">View weekly progress</a>
+      </aside>
+    </section>
+
+    <section id="practice" class="practice" aria-labelledby="practice-title">
+      <article class="panel session">
+        <div class="session-top">
+          <div><p id="session-label" class="kicker">Day 1</p><h2 id="practice-title">Introduce yourself</h2></div>
+          <span id="session-track" class="track">Everyday</span>
+        </div>
+        <div class="question">
+          <p class="kicker" id="question-label">Practice question</p>
+          <p id="question-text" class="question-text" tabindex="-1"></p>
+          <p id="question-hidden" class="question-text" hidden>Listen, then answer aloud.</p>
+          <p id="phrase" class="phrase"></p>
+          <details>
+            <summary>Show follow-up</summary>
+            <p id="follow-up"></p>
+          </details>
+        </div>
+        <div class="actions">
+          <button type="button" id="listen">Listen</button>
+          <button type="button" id="hide-question" aria-pressed="false">Hide question</button>
+          <button type="button" id="timer-toggle">Start timer</button>
+          <span id="timer" class="timer" aria-label="Time left" role="timer">01:00</span>
+          <button type="button" id="record" aria-pressed="false">Record answer</button>
+        </div>
+        <audio id="recording" controls hidden></audio>
+        <div class="session-bottom">
+          <button type="button" id="complete" class="primary" aria-pressed="false">Mark complete</button>
+          <a href="#grok-coach">Get Grok feedback</a>
+        </div>
+      </article>
+
+      <aside class="panel navigator" aria-labelledby="navigator-title">
+        <h2 id="navigator-title">Choose a session</h2>
+        <label for="session-select">Day and topic</label>
+        <select id="session-select"></select>
+        <div class="actions navigation-buttons">
+          <button type="button" id="previous">Previous</button>
+          <button type="button" id="next">Next</button>
+        </div>
+        <div class="opic-link">
+          <p class="kicker">More practice</p>
+          <h3>SpeakForward OPIc</h3>
+          <p>Keep using your existing lessons, question drills, and saved expressions.</p>
+          <a href="https://maincora44-wq.github.io/speakforward-opic/" target="_blank" rel="noopener noreferrer">Open SpeakForward OPIc</a>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel coach" id="grok-coach" aria-labelledby="coach-title">
+      <div>
+        <p class="kicker">Grok chat</p>
+        <h2 id="coach-title">Continue with your coach</h2>
+        <p>Copy the current session’s prompt, then paste it into a new Grok chat.</p>
+        <label for="answer">Your answer <span>(optional)</span></label>
+        <textarea id="answer" rows="3" maxlength="3000" placeholder="Add a transcript for feedback, or leave this blank for live practice."></textarea>
+        <div class="actions">
+          <button type="button" class="primary" id="copy-session">Copy session prompt</button>
+          <a href="https://grok.com/" target="_blank" rel="noopener noreferrer">Open Grok</a>
+        </div>
+      </div>
+      <div class="prompt-panel">
+        <label for="session-prompt">Prompt preview</label>
+        <textarea id="session-prompt" rows="9" readonly spellcheck="false"></textarea>
+      </div>
+    </section>
+
+    <section class="panel progress-panel" id="progress" aria-labelledby="progress-title">
+      <h2 id="progress-title">Weekly progress</h2>
+      <p>Completion stays in this browser. Answer drafts and recordings are cleared when you switch sessions or reload.</p>
+      <div id="week-list" class="week-grid"></div>
+    </section>
+
+    <section class="panel bot" id="grok-bot" aria-labelledby="bot-title">
+      <div>
+        <p class="kicker">Reusable instructions</p>
+        <h2 id="bot-title">Set up your Grok bot</h2>
+        <p>Copy the coaching instructions into a Grok chat or into your bot’s instruction field if it has one. Start with “Speaking Studio,” “OPIc,” or “Business English.”</p>
+      </div>
+      <div class="actions">
+        <button type="button" id="copy-bot">Copy bot instructions</button>
+        <a href="bot-instructions.txt" download>Download instructions</a>
+      </div>
+    </section>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <noscript>Enable JavaScript to use the practice sessions and progress tracker.</noscript>
+  </main>
+</body>
+</html>

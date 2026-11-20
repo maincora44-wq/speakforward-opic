@@ -15,7 +15,10 @@ self.addEventListener('message', event => {
 });
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin || !url.pathname.startsWith(new URL('./', self.location.href).pathname)) return;
+  const scopePath = new URL('./', self.location.href).pathname;
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || !url.pathname.startsWith(scopePath)) return;
+  const relativePath = url.pathname.slice(scopePath.length);
+  if (relativePath === 'grok' || relativePath.startsWith('grok/')) return;
   // Keep each installed shell coherent; a new worker activates only on explicit update or after old tabs close.
   event.respondWith(caches.open(CACHE).then(async cache => {
     const request = event.request.mode === 'navigate' ? new URL('./index.html', self.location.href).href : event.request;

@@ -65,3 +65,11 @@ test('worker respects scope, method and initial-install failure', async () => {
   assert.equal(env.request('https://fred.stlouisfed.org/series/DEXKOUS'),undefined);
   env.offline(); await assert.rejects(env.lifecycle('install'),/offline/);
 });
+test('worker leaves the Grok studio and its assets to the network', async () => {
+  const env = worker();
+  await env.lifecycle('install');
+  assert.equal(env.request('grok', 'GET', 'navigate'), undefined);
+  assert.equal(env.request('grok/', 'GET', 'navigate'), undefined);
+  assert.equal(env.request('grok/app.js'), undefined);
+  assert.equal(env.request('grok/bot-instructions.txt'), undefined);
+});
